@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nullspaceSR"
+version = "0.1.0"
+description = "Direct block-null-space PCA super-resolution research scaffold"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["torch>=2.1", "numpy>=1.24", "Pillow>=9.1", "PyYAML>=6.0"]
+
+[project.scripts]
+nusesr-fit-pca = "nullspaceSR.fit_pca:main"
+nusesr-train = "nullspaceSR.train:main"
+nusesr-test = "nullspaceSR.test:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

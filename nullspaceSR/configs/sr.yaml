@@ -1,0 +1,18 @@
+# Experiment specification; the synthetic example does not parse this file.
+task: super_resolution
+scale: 4
+channels: 3
+measurement_operator: average_pool_non_overlapping
+input_format: BCHW
+pca:
+  coordinates: analytic_helmert_null_basis
+  rank: 8
+  fit_split: train
+  accumulation_dtype: float64
+  frozen: true
+predictor:
+  name: SmallCoefficientCNN
+  width: 32
+  output_channels: 24  # channels * rank
+loss: coefficient_sse_per_hr_pixel
+consistency: structural

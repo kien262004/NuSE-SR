@@ -1,0 +1,9 @@
+checkpoint: runs/nusesr_x4_k8/best.pt
+hr_dir: data/DIV2K_valid_HR
+test_dataset: div2k
+test_dataset_options: {}
+output: results/nusesr_x4_k8_validation
+device: auto
+workers: 0
+shave: 0
+save_images: false

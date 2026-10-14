@@ -1,0 +1,13 @@
+# Paths relative to the working directory (run commands at repository root).
+train_hr: data/DIV2K_train_HR
+train_dataset: div2k
+train_dataset_options: {}
+output: basis/avgpool_x4_rank8.pt
+scale: 4
+rank: 8
+crop_size: 256
+repeat: 4
+batch_size: 8
+workers: 0
+seed: 2026
+augment: false

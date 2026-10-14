@@ -1,7 +1,7 @@
 import torch
 from torch.utils.data import DataLoader
 
-from nullspaceSR.utils import seed_worker
+from ..utils import seed_worker
 from .contracts import collate_sr
 
 

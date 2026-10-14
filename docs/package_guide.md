@@ -1,12 +1,13 @@
 # nullspaceSR package guide
 
-The Python package lives in `src/nullspaceSR/`. Project commands live at the repository root:
+The Python package lives in `nullspaceSR/`. Project commands live at the repository root:
 
 ```text
 train.py       # training and resume
 test.py        # checkpoint evaluation
 fit_pca.py     # offline PCA fitting entry point
-src/nullspaceSR/
+scripts/       # fit_pca.sh, train.sh, test.sh launchers
+nullspaceSR/
   data/        # datasets, sample contract, registry, loaders
   models/     # coefficient predictor and NuSESR
   operators/  # measurement operator and pseudoinverse

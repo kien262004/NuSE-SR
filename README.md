@@ -128,10 +128,11 @@ Decoder tính trước $U_k=QV_k$ và $\mu=Qm$, nên inference chỉ tổng hợ
 ├── train.py                           # CLI huấn luyện / resume
 ├── test.py                            # CLI đánh giá checkpoint
 ├── configs/                          # Cấu hình PCA/train/test
+├── scripts/                           # Script fit_pca.sh, train.sh, test.sh
 ├── docs/                             # Hướng dẫn package và data contract
 ├── examples/smoke_sr.py               # Demo synthetic và một bước train
 ├── tests/                            # Kiểm tra toán học và pipeline
-└── src/nullspaceSR/                   # Package Python
+├── nullspaceSR/                   # Package Python
     ├── models/backbonSR.py            # NuSESR
     ├── models/coefficient_cnn.py      # Predictor mẫu
     ├── operators/                    # A và A†
@@ -174,7 +175,7 @@ data/
     └── ...
 ```
 
-Chỉnh đường dẫn và ngân sách huấn luyện trong `configs/*_div2k.yaml`. Mọi đường dẫn tương đối trong YAML được tính từ thư mục đang chạy lệnh. Từ thư mục gốc repository:
+Chỉnh đường dẫn và ngân sách huấn luyện trong `configs/*_div2k.yaml`. Mọi đường dẫn tương đối trong YAML được tính từ thư mục gốc repository. Các entry point tự định vị thư mục này, kể cả khi chạy từ thư mục khác. Từ thư mục gốc repository:
 
 ```bash
 # 1. Fit decoder chỉ bằng train HR.
@@ -186,6 +187,32 @@ python train.py --config configs/train_div2k.yaml
 # 3. Đánh giá checkpoint tốt nhất trên validation.
 python test.py --config configs/test_div2k.yaml
 ```
+
+PowerShell and Linux launcher scripts run project commands from the repository root.
+
+```powershell
+# Fit PCA if requested, then train.
+.\scripts\train.ps1 -FitPca
+
+# Resume from a checkpoint.
+.\scripts\train.ps1 -ResumeFrom runs/nusesr_x4_k8/last.pt
+
+# Evaluate the default best checkpoint.
+.\scripts\test.ps1
+
+# Override checkpoint, HR folder, output, or save reconstructed images.
+.\scripts\test.ps1 -Checkpoint runs/nusesr_x4_k8/epoch_0100.pt -HrDir data/DIV2K_valid_HR -SaveImages
+```
+
+From the repository root on Linux, run:
+
+```bash
+bash scripts/fit_pca.sh
+bash scripts/train.sh
+bash scripts/test.sh
+```
+
+The scripts use the default configs under `configs/`; edit the YAML files to change paths or settings.
 
 Sau khi cài package, cũng có thể dùng `nusesr-fit-pca`, `nusesr-train`, `nusesr-test`. Tham số CLI ghi đè giá trị YAML; xem các lựa chọn với `--help`.
 

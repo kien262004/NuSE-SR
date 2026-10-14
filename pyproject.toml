@@ -19,4 +19,5 @@ nusesr-test = "test:main"
 py-modules = ["train", "test"]
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["."]
+include = ["nullspaceSR*"]

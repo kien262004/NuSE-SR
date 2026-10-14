@@ -1,7 +1,7 @@
 from torch import Tensor, nn
 
-from nullspaceSR.operators import AveragePoolSR
-from nullspaceSR.pca import BlockNullSpacePCA
+from ..operators import AveragePoolSR
+from ..pca import BlockNullSpacePCA
 
 
 class NuSESR(nn.Module):

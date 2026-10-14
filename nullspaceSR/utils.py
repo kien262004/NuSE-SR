@@ -17,7 +17,7 @@ from PIL import Image
 def parse_args(parser: argparse.ArgumentParser):
     """Optional flat YAML defaults; explicitly supplied CLI flags override them.
 
-    Relative paths are resolved by the process working directory.
+    Repository entry points set the working directory to the project root before parsing paths.
     """
     parser.add_argument("--config", help="Flat YAML configuration")
     preliminary, _ = parser.parse_known_args()

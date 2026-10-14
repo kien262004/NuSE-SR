@@ -1,6 +1,9 @@
 """Evaluate a self-contained NuSESR checkpoint on an HR image folder."""
 import argparse
+import os
 from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parent
 
 import torch
 
@@ -42,4 +45,5 @@ def main():
 
 
 if __name__ == "__main__":
+    os.chdir(PROJECT_ROOT)
     main()

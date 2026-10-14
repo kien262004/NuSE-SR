@@ -1,6 +1,9 @@
 """Train the coefficient predictor with a fixed block-null-space PCA decoder."""
 import argparse
+import os
 from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parent
 
 import torch
 
@@ -138,4 +141,5 @@ def main():
 
 
 if __name__ == "__main__":
+    os.chdir(PROJECT_ROOT)
     main()

@@ -5,8 +5,8 @@ Khung PyTorch cho SR bằng **hệ số PCA trong null space**, với average po
 ## Cấu trúc
 
 ```text
-nullspaceSR/
-├── configs/                  # Đặc tả cấu hình, chưa có YAML runner
+./
+├── configs/                  # Cấu hình PCA/train/test
 ├── examples/                 # Synthetic demo và một bước train
 ├── tests/                    # Kiểm tra các bảo đảm toán học
 ├── src/nullspaceSR/
@@ -15,7 +15,7 @@ nullspaceSR/
 │   ├── patches.py            # Pixel-unshuffle/shuffle theo block
 │   ├── pca.py                # Q, streaming PCA, encode/decode, save/load
 │   └── losses.py             # Coefficient SSE / số pixel HR
-└── README.md
+└── README.md                 # Hướng dẫn ở thư mục gốc
 ```
 
 ## Công thức
@@ -34,7 +34,7 @@ Decoder tính trước `U=Q@V_k` và `mu=Q@m` khi khởi tạo, nên inference c
 
 ## Cài đặt và chạy ví dụ
 
-Tại thư mục `nullspaceSR`:
+Tại thư mục gốc project:
 
 ```bash
 pip install -e .
@@ -75,14 +75,14 @@ Với basis trực chuẩn và `lr=A(hr)`, `image_MSE = truncation_image_MSE + c
 
 ## Bố cục mở rộng gợi ý
 
-Dataset dùng giao diện chung `input/target/id/meta/extras`. Loader, engine và evaluator không phụ thuộc DIV2K. Có thể thay dataset qua `module:Class` và options trong YAML; xem [hướng dẫn giao diện dữ liệu](docs/data_contract.md).
+Dataset dùng giao diện chung `input/target/id/meta/extras`. Loader, engine và evaluator không phụ thuộc DIV2K. Có thể thay dataset qua `module:Class` và options trong YAML; xem [hướng dẫn giao diện dữ liệu](data_contract.md).
 
-Khung đã có dataloader DIV2K, train/resume, evaluation và RGB PSNR/SSIM/MSE. Từ thư mục gốc repository (thư mục cha của `nullspaceSR`):
+Khung đã có dataloader DIV2K, train/resume, evaluation và RGB PSNR/SSIM/MSE. Từ thư mục gốc repository:
 
 ```bash
-python nullspaceSR/fit_pca.py --config nullspaceSR/configs/pca_div2k.yaml
-python nullspaceSR/train.py --config nullspaceSR/configs/train_div2k.yaml
-python nullspaceSR/test.py --config nullspaceSR/configs/test_div2k.yaml
+python fit_pca.py --config configs/pca_div2k.yaml
+python train.py --config configs/train_div2k.yaml
+python test.py --config configs/test_div2k.yaml
 ```
 
 Chuẩn bị `data/DIV2K_train_HR` và `data/DIV2K_valid_HR`, hoặc chỉnh đường dẫn YAML. Mọi đường dẫn tương đối tính từ working directory. LR được sinh từ HR bằng average pooling; không dùng LR bicubic có sẵn. Xem [README gốc](../README.md#pipeline-div2k) để biết giao thức dữ liệu, metric, checkpoint và resume.

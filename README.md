@@ -65,34 +65,29 @@ Decoder tính trước $U_k=QV_k$ và $\mu=Qm$, nên inference chỉ tổng hợ
 ├── plan/                             # Tài liệu và prototype nghiên cứu
 │   ├── Ke_hoach_NullSpace_PCA_Efficient_SR.md
 │   └── rnd_nullspace_pca_sr.py
-└── nullspaceSR/
-    ├── pyproject.toml
-    ├── fit_pca.py                     # CLI fit PCA offline
-    ├── train.py                       # CLI huấn luyện / resume
-    ├── test.py                        # CLI đánh giá checkpoint
-    ├── README.md                     # Hướng dẫn package
-    ├── configs/sr.yaml               # Đặc tả thí nghiệm mẫu
-    ├── examples/smoke_sr.py           # Demo synthetic và một bước train
-    ├── tests/test_nullspace.py        # Kiểm tra các bảo đảm toán học
-    └── src/nullspaceSR/
-        ├── models/
-        │   ├── backbonSR.py           # NuSESR
-        │   └── coefficient_cnn.py     # Predictor mẫu
-        ├── operators/                # A và A†
-        ├── data/div2k.py              # Dataset và dataloader
-        ├── data/contracts.py          # Sample/batch schema và adapter
-        ├── data/factory.py            # Registry / import custom dataset
-        ├── data/loader.py             # Loader độc lập với dataset
-        ├── engine.py                  # Training epoch trên batch chung
-        ├── fit_pca.py                 # Fit PCA và provenance metadata
-        ├── train.py                   # AdamW, scheduler, checkpoint
-        ├── test.py                    # Đánh giá và xuất kết quả
-        ├── evaluation.py              # Oracle / prediction error decomposition
-        ├── metrics.py                 # RGB MSE, PSNR, SSIM
-        ├── utils.py                   # Seed, YAML, checkpoint, JSON/CSV/PNG
-        ├── patches.py                # Block extraction và pixel shuffle
-        ├── pca.py                    # Q, PCA fitting và decoder
-        └── losses.py                 # Loss hệ số
+├── pyproject.toml
+├── fit_pca.py                         # CLI fit PCA offline
+├── train.py                           # CLI huấn luyện / resume
+├── test.py                            # CLI đánh giá checkpoint
+├── configs/                          # Cấu hình PCA/train/test
+├── docs/                             # Hướng dẫn package và data contract
+├── examples/smoke_sr.py               # Demo synthetic và một bước train
+├── tests/                            # Kiểm tra toán học và pipeline
+└── src/nullspaceSR/                   # Package Python
+    ├── models/backbonSR.py            # NuSESR
+    ├── models/coefficient_cnn.py      # Predictor mẫu
+    ├── operators/                    # A và A†
+    ├── data/                         # Dataset, contract, registry, loader
+    ├── engine.py                     # Training epoch trên batch chung
+    ├── fit_pca.py                     # Fit PCA và provenance metadata
+    ├── train.py                      # AdamW, scheduler, checkpoint
+    ├── test.py                       # Đánh giá và xuất kết quả
+    ├── evaluation.py                 # Oracle / prediction error decomposition
+    ├── metrics.py                    # RGB MSE, PSNR, SSIM
+    ├── utils.py                      # Seed, YAML, checkpoint, JSON/CSV/PNG
+    ├── patches.py                    # Block extraction và pixel shuffle
+    ├── pca.py                        # Q, PCA fitting và decoder
+    └── losses.py                     # Loss hệ số
 ```
 
 ## Cài đặt và chạy
@@ -100,9 +95,9 @@ Decoder tính trước $U_k=QV_k$ và $\mu=Qm$, nên inference chỉ tổng hợ
 Yêu cầu **Python ≥ 3.10** và **PyTorch ≥ 2.1**. Chạy các lệnh sau từ thư mục gốc repository:
 
 ```bash
-python -m pip install -e ./nullspaceSR
-python nullspaceSR/examples/smoke_sr.py
-python -m unittest discover -s nullspaceSR/tests
+python -m pip install -e .
+python examples/smoke_sr.py
+python -m unittest discover -s tests
 ```
 
 Demo fit PCA trên dữ liệu synthetic, kiểm tra null-space consistency, phân rã lỗi và thực hiện một bước tối ưu predictor. Bộ tests kiểm tra cơ sở Q, trường hợp covariance thiếu hạng, decoder full rank, lưu/nạp basis và đường forward không dùng phép chiếu.
@@ -123,24 +118,24 @@ data/
     └── ...
 ```
 
-Chỉnh đường dẫn và ngân sách huấn luyện trong `nullspaceSR/configs/*_div2k.yaml`. Mọi đường dẫn tương đối trong YAML được tính từ thư mục đang chạy lệnh. Từ thư mục gốc repository:
+Chỉnh đường dẫn và ngân sách huấn luyện trong `configs/*_div2k.yaml`. Mọi đường dẫn tương đối trong YAML được tính từ thư mục đang chạy lệnh. Từ thư mục gốc repository:
 
 ```bash
 # 1. Fit decoder chỉ bằng train HR.
-python nullspaceSR/fit_pca.py --config nullspaceSR/configs/pca_div2k.yaml
+python fit_pca.py --config configs/pca_div2k.yaml
 
 # 2. Huấn luyện predictor, giữ decoder cố định.
-python nullspaceSR/train.py --config nullspaceSR/configs/train_div2k.yaml
+python train.py --config configs/train_div2k.yaml
 
 # 3. Đánh giá checkpoint tốt nhất trên validation.
-python nullspaceSR/test.py --config nullspaceSR/configs/test_div2k.yaml
+python test.py --config configs/test_div2k.yaml
 ```
 
 Sau khi cài package, cũng có thể dùng `nusesr-fit-pca`, `nusesr-train`, `nusesr-test` hoặc `python -m nullspaceSR.train`. Tham số CLI ghi đè giá trị YAML; xem các lựa chọn với `--help`.
 
 ### Dataloader
 
-Mọi dataset trả sample gồm `input`, `target`, `id`, `meta`, `extras`; loader stack tensor và giữ metadata theo từng sample. Train/PCA/test dùng chung schema. Chọn dataset mới bằng `train_dataset`/`val_dataset`/`test_dataset` và kwargs constructor trong YAML. Xem [giao diện dữ liệu và cách thêm dataset](nullspaceSR/docs/data_contract.md).
+Mọi dataset trả sample gồm `input`, `target`, `id`, `meta`, `extras`; loader stack tensor và giữ metadata theo từng sample. Train/PCA/test dùng chung schema. Chọn dataset mới bằng `train_dataset`/`val_dataset`/`test_dataset` và kwargs constructor trong YAML. Xem [giao diện dữ liệu và cách thêm dataset](docs/data_contract.md).
 
 Train dùng crop HR ngẫu nhiên (mặc định 256×256), flip/rotate và `repeat` lượt lấy mẫu cho mỗi ảnh trong mỗi epoch. LR được tạo sau augmentation bằng `avg_pool2d`. Sampling dựa trên seed, epoch và index; `workers=0` là cấu hình khởi đầu dùng được trên Windows.
 
@@ -149,7 +144,7 @@ Validation/test dùng toàn ảnh, cắt phần dư ở cạnh dưới/phải đ
 ### Checkpoint và resume
 
 ```bash
-python nullspaceSR/train.py --config nullspaceSR/configs/train_div2k.yaml --resume runs/nusesr_x4_k8/last.pt
+python train.py --config configs/train_div2k.yaml --resume runs/nusesr_x4_k8/last.pt
 ```
 
 `last.pt` lưu model, PCA buffers, optimizer, scheduler, trạng thái RNG và lịch sử. `best.pt` được chọn theo RGB PSNR trung bình từng ảnh validation. Checkpoint theo epoch được lưu mỗi `checkpoint_every` epoch. Resume tiếp tục từ đầu epoch kế tiếp và yêu cầu giữ nguyên cấu hình huấn luyện, basis và danh sách ảnh; không hỗ trợ khôi phục giữa một epoch. Không cần file basis ngoài để chạy `test.py` vì checkpoint mô hình đã chứa decoder.
@@ -163,7 +158,7 @@ Thư mục run chứa `config.json`, `manifest.json`, `history.json` và metric 
 Mặc định đo ảnh float RGB nguyên trạng, `shave=0`, không clamp hoặc lượng tử hóa. SSIM dùng Gaussian window 11×11 (sigma 1.5), valid convolution và population covariance; ảnh nhỏ dùng window lẻ phù hợp. Border shave chỉ áp dụng cho metric chất lượng; phân rã lỗi luôn đo trên toàn ảnh.
 
 ```bash
-python nullspaceSR/test.py --config nullspaceSR/configs/test_div2k.yaml --save-images
+python test.py --config configs/test_div2k.yaml --save-images
 ```
 
 PNG xuất ra được clamp/round để xem ảnh; metric luôn đo trước bước này. Dataset, basis, run, kết quả và môi trường kiểm tra được bỏ qua bởi `.gitignore`.

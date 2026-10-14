@@ -19,7 +19,7 @@ Mạng dự đoán `C × k` bản đồ hệ số ở độ phân giải LR. Dec
 | Thành phần | Vai trò |
 |---|---|
 | `NuSESR` | Ghép predictor, PCA decoder và thành phần `A†y` |
-| `SmallCoefficientCNN` | Backbone mẫu hoạt động ở miền LR |
+| `IMDN` | Predictor coefficient miền LR, dựa trên sáu IMDB của kiến trúc IMDN |
 | `BlockNullSpacePCA` | Fit PCA offline, encode nhãn, decode chi tiết, lưu/nạp basis |
 | `AveragePoolSR` | Toán tử đo average pooling và giả nghịch đảo lặp pixel |
 | `coefficient_image_mse` | Loss hệ số chuẩn hóa theo số pixel HR |
@@ -27,6 +27,67 @@ Mạng dự đoán `C × k` bản đồ hệ số ở độ phân giải LR. Dec
 | `make_loader` / `SRSample` | Giao diện input/target chung cho các dataset |
 
 Tên lớp mô hình là **`NuSESR`**; tên package Python là **`nullspaceSR`**.
+
+## Luồng chạy model
+
+### 1. Chuẩn bị PCA
+
+PCA được fit offline chỉ từ HR của train split. Basis được lưu lại và giữ cố định khi train.
+
+```mermaid
+flowchart LR
+    HR["Train HR images"] --> BLOCKS["Split into s x s blocks"]
+    BLOCKS --> NULLCOORD["Null coordinates Q^T"]
+    NULLCOORD --> FIT["Fit PCA"]
+    FIT --> BASIS["Save mean and components"]
+```
+
+### 2. Huấn luyện predictor
+
+HR tạo LR đầu vào và hệ số mục tiêu `c*`. CNN chỉ nhận LR.
+
+```mermaid
+flowchart TB
+    subgraph INPUT["Input branch"]
+        HR["HR batch"] --> A["Average pooling A"]
+        A --> LR["LR"]
+    end
+
+    subgraph MODEL["Model"]
+        LR --> CNN["Coefficient CNN"]
+        CNN --> CPRED["Predicted coefficients c"]
+    end
+
+    subgraph LABEL["Training labels only"]
+        HR --> ENCODER["PCA encoder"]
+        BASIS["Fixed PCA basis"] --> ENCODER
+        ENCODER --> CTARGET["Target coefficients c*"]
+    end
+
+    CPRED --> LOSS["Loss between c and c*"]
+    CTARGET --> LOSS
+    LOSS -. "Gradient updates CNN" .-> CNN
+```
+
+### 3. Suy luận
+
+Inference chỉ cần LR và basis trong checkpoint; không cần HR hay PCA encoder.
+
+```mermaid
+flowchart LR
+    LR["Input LR"] --> CNN["Coefficient CNN"]
+    CNN --> CPRED["Predicted coefficients c"]
+    CPRED --> DECODER["Fixed PCA decoder"]
+    BASIS["PCA basis from checkpoint"] --> DECODER
+    DECODER --> Z["Null-space detail z"]
+
+    LR --> PINV["A^dagger: repeat LR pixels into blocks"]
+    PINV --> BASE["Base component A^dagger y"]
+
+    Z --> SUM["Add components"]
+    BASE --> SUM
+    SUM --> SR["SR image"]
+```
 
 ## Cơ sở toán học
 
@@ -62,9 +123,6 @@ Decoder tính trước $U_k=QV_k$ và $\mu=Qm$, nên inference chỉ tổng hợ
 ├── README.md
 ├── LICENSE
 ├── .gitignore
-├── plan/                             # Tài liệu và prototype nghiên cứu
-│   ├── Ke_hoach_NullSpace_PCA_Efficient_SR.md
-│   └── rnd_nullspace_pca_sr.py
 ├── pyproject.toml
 ├── fit_pca.py                         # CLI fit PCA offline
 ├── train.py                           # CLI huấn luyện / resume
@@ -80,8 +138,6 @@ Decoder tính trước $U_k=QV_k$ và $\mu=Qm$, nên inference chỉ tổng hợ
     ├── data/                         # Dataset, contract, registry, loader
     ├── engine.py                     # Training epoch trên batch chung
     ├── fit_pca.py                     # Fit PCA và provenance metadata
-    ├── train.py                      # AdamW, scheduler, checkpoint
-    ├── test.py                       # Đánh giá và xuất kết quả
     ├── evaluation.py                 # Oracle / prediction error decomposition
     ├── metrics.py                    # RGB MSE, PSNR, SSIM
     ├── utils.py                      # Seed, YAML, checkpoint, JSON/CSV/PNG
@@ -131,7 +187,7 @@ python train.py --config configs/train_div2k.yaml
 python test.py --config configs/test_div2k.yaml
 ```
 
-Sau khi cài package, cũng có thể dùng `nusesr-fit-pca`, `nusesr-train`, `nusesr-test` hoặc `python -m nullspaceSR.train`. Tham số CLI ghi đè giá trị YAML; xem các lựa chọn với `--help`.
+Sau khi cài package, cũng có thể dùng `nusesr-fit-pca`, `nusesr-train`, `nusesr-test`. Tham số CLI ghi đè giá trị YAML; xem các lựa chọn với `--help`.
 
 ### Dataloader
 
@@ -169,7 +225,7 @@ Ví dụ tối thiểu với dữ liệu synthetic:
 
 ```python
 import torch
-from nullspaceSR import BlockNullSpacePCA, NuSESR, SmallCoefficientCNN
+from nullspaceSR import BlockNullSpacePCA, NuSESR, IMDN
 
 scale, rank, channels = 4, 8, 3
 train_hr_batches = [torch.rand(2, channels, 32, 32) for _ in range(3)]
@@ -178,7 +234,7 @@ train_hr_batches = [torch.rand(2, channels, 32, 32) for _ in range(3)]
 pca = BlockNullSpacePCA.fit(train_hr_batches, scale=scale, rank=rank)
 pca.save("basis.pt")
 
-predictor = SmallCoefficientCNN(channels=channels, rank=rank, width=32)
+predictor = IMDN(channels=channels, rank=rank, width=64)
 model = NuSESR(predictor, pca)
 
 hr = torch.rand(1, channels, 32, 48)
@@ -227,7 +283,10 @@ Nếu dùng coefficient MSE thông thường, hệ số quy đổi sang đóng g
 
 ## Thay backbone
 
-Bạn có thể thay `SmallCoefficientCNN` bằng mạng của mình. Predictor cần tuân theo giao diện:
+Lớp `IMDN` giữ stem, sáu Information Multi-Distillation Blocks (IMDB), contrast-aware channel attention, feature fusion và LR residual của IMDN gốc. Chỉ output head được thay: xuất `C*k` kênh hệ số ở cùng độ phân giải LR, không pixel-shuffle thành RGB ([IMDN source](https://github.com/Zheng222/IMDN/blob/master/model/architecture.py)).
+
+
+Bạn có thể thay `IMDN` bằng mạng của mình. Predictor cần tuân theo giao diện:
 
 ```text
 Input:  [B, C, H_LR, W_LR]
@@ -244,7 +303,6 @@ Predictor có thể khai thác ngữ cảnh giữa các block. Ràng buộc null
 4. So sánh với DCT, random null basis và full-rank null-space output.
 5. Đo chất lượng ảnh, latency E2E và bộ nhớ trên cùng thiết bị trước khi kết luận về hiệu quả.
 
-Kế hoạch chi tiết nằm trong [bản kế hoạch nghiên cứu](plan/Ke_hoach_NullSpace_PCA_Efficient_SR.md). [Prototype ban đầu](plan/rnd_nullspace_pca_sr.py) được giữ để tham khảo; package `nullspaceSR` là khung phát triển hiện tại.
 
 ## Phạm vi và giới hạn
 

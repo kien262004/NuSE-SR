@@ -29,27 +29,28 @@ class PipelineTest(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             basis, output = root / "basis.pt", root / "run"
             config = root / "pca.yaml"
-            config.write_text(f'train_hr: "{root / "train"}"\noutput: "{basis}"\n'
+            config.write_text(f'train_hr: "{(root / "train").as_posix()}"\n'
+                              f'output: "{basis.as_posix()}"\n'
                               'scale: 4\nrank: 2\ncrop_size: 16\nrepeat: 1\nbatch_size: 2\n')
             run("nullspaceSR.fit_pca", "--config", config, "--scale", 2)
             arguments = ["--train-hr", root / "train", "--val-hr", root / "val", "--basis", basis,
                          "--output", output, "--scale", 2, "--rank", 2, "--width", 4,
                          "--crop-size", 16, "--repeat", 1, "--batch-size", 2,
                          "--epochs", 2, "--device", "cpu", "--checkpoint-every", 1]
-            run("nullspaceSR.train", *arguments)
+            run("train", *arguments)
             self.assertTrue((output / "best.pt").is_file())
             # Resume epoch one from the same two-epoch schedule and compare.
             last = torch.load(output / "last.pt", weights_only=True)
             self.assertEqual(last["epoch"], 2)
             resumed = root / "resumed"
-            run("nullspaceSR.train", *arguments, "--resume", output / "epoch_0001.pt", "--output", resumed)
+            run("train", *arguments, "--resume", output / "epoch_0001.pt", "--output", resumed)
             resumed_last = torch.load(resumed / "last.pt", weights_only=True)
             for key in last["model"]:
                 torch.testing.assert_close(last["model"][key], resumed_last["model"][key], rtol=0, atol=0)
             # Completed schedule is a supported no-op resume.
-            run("nullspaceSR.train", *arguments, "--resume", output / "last.pt")
+            run("train", *arguments, "--resume", output / "last.pt")
             results = root / "evaluation"
-            run("nullspaceSR.test", "--checkpoint", output / "last.pt", "--hr-dir", root / "val",
+            run("test", "--checkpoint", output / "last.pt", "--hr-dir", root / "val",
                 "--output", results, "--device", "cpu", "--save-images")
             report = json.loads((results / "metrics.json").read_text())
             self.assertLess(report["summary"]["dc_max_abs"], 1e-5)
@@ -70,11 +71,11 @@ class PipelineTest(unittest.TestCase):
             basis, output = root / "basis.pt", root / "run"
             run("nullspaceSR.fit_pca", "--train-dataset", dataset, "--output", basis,
                 "--scale", 2, "--rank", 2, "--batch-size", 2)
-            run("nullspaceSR.train", "--train-dataset", dataset, "--val-dataset", dataset,
+            run("train", "--train-dataset", dataset, "--val-dataset", dataset,
                 "--val-dataset-options", '{"split":"val"}', "--basis", basis,
                 "--output", output, "--scale", 2, "--rank", 2, "--width", 4,
                 "--epochs", 1, "--batch-size", 2, "--device", "cpu")
-            run("nullspaceSR.test", "--test-dataset", dataset, "--test-dataset-options", '{"split":"test"}',
+            run("test", "--test-dataset", dataset, "--test-dataset-options", '{"split":"test"}',
                 "--checkpoint", output / "last.pt", "--output", root / "results", "--device", "cpu")
             report = json.loads((root / "results" / "metrics.json").read_text())
             self.assertEqual(report["architecture"]["channels"], 1)

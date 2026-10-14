@@ -11,8 +11,8 @@ pca:
   accumulation_dtype: float64
   frozen: true
 predictor:
-  name: SmallCoefficientCNN
-  width: 32
+  name: IMDN
+  width: 64
   output_channels: 24  # channels * rank
 loss: coefficient_sse_per_hr_pixel
 consistency: structural

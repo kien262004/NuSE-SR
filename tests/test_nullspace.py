@@ -8,7 +8,7 @@ import torch
 
 from nullspaceSR import (
     AveragePoolSR, BlockNullSpacePCA, NuSESR,
-    SmallCoefficientCNN, block_null_basis, coefficient_image_mse,
+    IMDN, block_null_basis, coefficient_image_mse,
 )
 
 
@@ -26,7 +26,7 @@ class NullSpaceTests(unittest.TestCase):
         for scale, rank in ((2, 2), (4, 8)):
             with self.subTest(scale=scale):
                 decoder = BlockNullSpacePCA.fit([torch.rand(2, 3, 16, 24)], scale, rank)
-                model = NuSESR(SmallCoefficientCNN(3, rank, width=8), decoder)
+                model = NuSESR(IMDN(3, rank, width=8), decoder)
                 hr = torch.rand(2, 3, 16, 24)
                 lr = model.operator(hr)
                 target = decoder.encode_hr(hr)

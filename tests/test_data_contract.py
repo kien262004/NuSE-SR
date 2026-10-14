@@ -4,7 +4,7 @@ import torch
 from torch.utils.data import Dataset
 from nullspaceSR.data import (make_sample, collate_sr, make_loader, MappingDatasetAdapter,
                              dataset_manifest, set_dataset_epoch, supervised_batch)
-from nullspaceSR import AveragePoolSR, BlockNullSpacePCA, NuSESR, SmallCoefficientCNN
+from nullspaceSR import AveragePoolSR, BlockNullSpacePCA, NuSESR, IMDN
 from nullspaceSR.engine import train_one_epoch
 from nullspaceSR.evaluation import evaluate
 from custom_data_fixture import ToySRDataset
@@ -50,7 +50,7 @@ class DataContractTests(unittest.TestCase):
         self.assertEqual(dataset_manifest(dataset)["length"], 2)
         loader = make_loader(dataset, batch_size=2)
         decoder = BlockNullSpacePCA.fit([next(iter(loader))["target"]], scale=2, rank=2)
-        model = NuSESR(SmallCoefficientCNN(1, 2, width=4), decoder)
+        model = NuSESR(IMDN(1, 2, width=4), decoder)
         optimizer = torch.optim.Adam(model.predictor.parameters())
         metrics = train_one_epoch(model, loader, optimizer, "cpu", log_every=0)
         self.assertGreaterEqual(metrics["train_coefficient_image_mse"], 0)

@@ -41,7 +41,7 @@ val_dataset_options:
 
 `*_dataset_options` là kwargs constructor custom, được truyền nguyên trạng. Constructor trả `torch.utils.data.Dataset` có `__len__` và `__getitem__`. Các tham số crop/repeat/HR folder của CLI chỉ là mặc định cho `div2k`/`hr_folder`; custom dataset tự quy định preprocessing qua options. Scale trong options phải khớp model.
 
-PCA fitting dùng `train_dataset`/`train_dataset_options`; test dùng `test_dataset`/`test_dataset_options`. Với module riêng trong working directory, chạy `python -m nullspaceSR.train --config ...`; package custom đã cài dùng được với mọi entry point. Có thể đăng ký tên bằng `register_dataset("my_data", MyDataset)` trong chương trình Python; đường dẫn `module:Class` thuận tiện hơn cho CLI vì không cần sửa code train.
+PCA fitting dùng `train_dataset`/`train_dataset_options`; test dùng `test_dataset`/`test_dataset_options`. Với module riêng trong working directory, chạy `python train.py --config ...`; package custom đã cài dùng được với mọi entry point. Có thể đăng ký tên bằng `register_dataset("my_data", MyDataset)` trong chương trình Python; đường dẫn `module:Class` thuận tiện hơn cho CLI vì không cần sửa code train.
 
 Cấu hình DIV2K cũ vẫn chạy. `hr_folder` dùng cùng implementation để đọc thư mục HR của dataset khác.
 

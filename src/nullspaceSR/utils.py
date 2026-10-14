@@ -136,7 +136,7 @@ def restore_rng(state):
 
 
 def model_from_checkpoint(checkpoint):
-    from .models import NuSESR, SmallCoefficientCNN
+    from .models import IMDN, NuSESR
     from .pca import BlockNullSpacePCA
 
     arch = checkpoint["architecture"]
@@ -147,6 +147,7 @@ def model_from_checkpoint(checkpoint):
                                eigenvalues if eigenvalues.numel() else None)
     if decoder.channels != arch["channels"] or decoder.rank != arch["rank"]:
         raise ValueError("Checkpoint architecture and PCA buffers do not match")
-    model = NuSESR(SmallCoefficientCNN(arch["channels"], arch["rank"], arch["width"]), decoder)
+    predictor = IMDN(arch["channels"], arch["rank"], arch["width"])
+    model = NuSESR(predictor, decoder)
     model.load_state_dict(state)
     return model

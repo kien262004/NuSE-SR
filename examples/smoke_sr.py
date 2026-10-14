@@ -3,7 +3,7 @@
 import torch
 from nullspaceSR import (
     AveragePoolSR, BlockNullSpacePCA, NuSESR,
-    SmallCoefficientCNN, coefficient_image_mse,
+    IMDN, coefficient_image_mse,
 )
 
 
@@ -13,7 +13,7 @@ def main() -> None:
     # Replace TRAIN samples with a loader yielding floating HR tensors.
     train_hr = [torch.rand(2, channels, 32, 32) for _ in range(3)]
     decoder = BlockNullSpacePCA.fit(train_hr, scale=scale, rank=rank)
-    model = NuSESR(SmallCoefficientCNN(channels, rank), decoder)
+    model = NuSESR(IMDN(channels, rank), decoder)
     operator = AveragePoolSR(scale)
     hr = torch.rand(2, channels, 32, 48)  # Separate rectangular sample
     lr = operator(hr)

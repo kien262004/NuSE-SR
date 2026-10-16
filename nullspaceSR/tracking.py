@@ -10,7 +10,7 @@ def wandb_rgb_image(wandb, image, *, caption):
         raise ValueError(f"W&B preview expects a 3-channel CHW image, got {tuple(image.shape)}")
     pixels = image.clamp(0, 1).mul(255).round().to(dtype=torch.uint8)
     pixels = pixels.permute(1, 2, 0).contiguous().numpy()
-    return wandb.Image(pixels, mode="RGB", caption=caption, normalize=False)
+    return wandb.Image(pixels, mode="RGB", caption=caption)
 
 
 def add_wandb_arguments(parser):

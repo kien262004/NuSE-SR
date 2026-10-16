@@ -11,8 +11,8 @@ data:
   val_dataset: div2k
   test_dataset: div2k
   train_hr: /home/admin_mcn/scdc_data/data_bundle/phase1_seven_extra/div2k_train/DIV2K_train_HR
-  val_hr: /home/admin_mcn/scdc_data/data_bundle/phase1_seven_extra/div2k_val/DIV2K_valid_HR
-  hr_dir: /home/admin_mcn/scdc_data/data_bundle/phase1_seven_extra/div2k_val/DIV2K_valid_HR
+  val_hr: /home/admin_mcn/scdc_data/data_bundle/phase1_seven_extra/div2k_valid/DIV2K_valid_HR
+  hr_dir: /home/admin_mcn/scdc_data/data_bundle/phase1_seven_extra/div2k_valid/DIV2K_valid_HR
   resize:
     method: bicubic
     size:

@@ -9,9 +9,10 @@ data:
   train_dataset: div2k
   val_dataset: div2k
   test_dataset: div2k
-  train_hr: data/DIV2K_train_HR
-  val_hr: data/DIV2K_valid_HR
-  hr_dir: data/DIV2K_valid_HR
+  train_hr: ~/scdc_data/data_bundle/phase1_seven_extra/div2k_train/DIV2K_train_HR
+  val_hr: ~/scdc_data/data_bundle/phase1_seven_extra/div2k_val/DIV2K_valid_HR
+  hr_dir: ~/scdc_data/data_bundle/phase1_seven_extra/div2k_val/DIV2K_valid_HR
+
   resize:
     method: average_pool
     size:

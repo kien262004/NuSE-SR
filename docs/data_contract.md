@@ -76,3 +76,24 @@ Giao diện dùng được cho nhiều nguồn dữ liệu; NuSESR hiện cần 
 - `manifest()`: trả dictionary JSON-compatible để tracking/resume. `sources` có thể chứa list đường dẫn nguồn để kiểm tra train/validation overlap.
 
 Framework không phụ thuộc các thuộc tính `files/root/training`. Nếu không có manifest hook, chỉ ghi tên lớp và độ dài; không thể phát hiện thay đổi nội dung hoặc overlap chỉ từ thông tin này. Dataset mới cần hook này nếu muốn provenance đầy đủ. Không trả tensor/object tùy biến trong manifest.
+
+## Configurable HR-to-LR generation
+
+The DIV2K dataset creates LR from each HR image during `__getitem__`. Configure it under the dataset options in each YAML file:
+
+```yaml
+data:
+  resize:
+    method: average_pool
+    size: [64, 64]
+    antialias: true
+  val_dataset_options:
+    resize:
+      size: null
+```
+
+Built-in methods are `average_pool`, `bicubic`, and `bilinear`. A custom method
+can be selected as `module:function`; it receives `(hr_chw, scale)` and returns
+a floating CPU tensor with shape `[C, H/scale, W/scale]`. See
+[experiment configuration](configuration.md) for size and split overrides.
+NuSESR still checks `LR == A(HR)` during supervised training/evaluation.

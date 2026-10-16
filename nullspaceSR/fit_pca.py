@@ -23,7 +23,7 @@ def main():
     parser.add_argument("--workers", type=int, default=0)
     parser.add_argument("--seed", type=int, default=2026)
     parser.add_argument("--augment", action=argparse.BooleanOptionalAction, default=False)
-    args = parse_args(parser)
+    args = parse_args(parser, stage="pca")
     seed_everything(args.seed)
     dataset = build_dataset(args.train_dataset, args.train_dataset_options,
                             folder_defaults={"hr_dir": args.train_hr, "scale": args.scale,

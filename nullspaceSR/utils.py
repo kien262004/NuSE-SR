@@ -12,24 +12,24 @@ import numpy as np
 import torch
 import yaml
 from PIL import Image
+from .configuration import command_defaults
 
 
-def parse_args(parser: argparse.ArgumentParser):
-    """Optional flat YAML defaults; explicitly supplied CLI flags override them.
+def parse_args(parser: argparse.ArgumentParser, *, stage=None):
+    """Read experiment sections or legacy flat YAML; CLI flags override defaults.
 
     Repository entry points set the working directory to the project root before parsing paths.
     """
-    parser.add_argument("--config", help="Flat YAML configuration")
+    parser.add_argument("--config", help="Experiment YAML configuration")
     preliminary, _ = parser.parse_known_args()
     if preliminary.config:
         with open(preliminary.config, encoding="utf-8") as stream:
             defaults = yaml.safe_load(stream) or {}
-        if not isinstance(defaults, dict):
-            parser.error("YAML config must be a mapping")
         allowed = {action.dest for action in parser._actions} - {"help", "config"}
-        unknown = set(defaults) - allowed
-        if unknown:
-            parser.error(f"Unknown YAML keys: {sorted(unknown)}")
+        try:
+            defaults = command_defaults(defaults, stage, allowed)
+        except ValueError as error:
+            parser.error(str(error))
         parser.set_defaults(**defaults)
     return parser.parse_args()
 

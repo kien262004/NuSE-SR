@@ -22,7 +22,7 @@ def main():
     parser.add_argument("--workers", type=int, default=0)
     parser.add_argument("--shave", type=int, default=0)
     parser.add_argument("--save-images", action=argparse.BooleanOptionalAction, default=False)
-    args = parse_args(parser)
+    args = parse_args(parser, stage="evaluation")
     if not args.checkpoint:
         parser.error("checkpoint is required (CLI or YAML)")
     checkpoint = torch.load(args.checkpoint, map_location="cpu", weights_only=True)

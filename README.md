@@ -179,6 +179,7 @@ Chỉnh đường dẫn và ngân sách huấn luyện trong `configs/*_div2k.ya
 
 ```bash
 # 1. Fit decoder chỉ bằng train HR.
+
 python fit_pca.py --config configs/pca_div2k.yaml
 
 # 2. Huấn luyện predictor, giữ decoder cố định.
@@ -212,6 +213,7 @@ bash scripts/train.sh
 bash scripts/test.sh
 ```
 
+
 The scripts use the default configs under `configs/`; edit the YAML files to change paths or settings.
 
 Sau khi cài package, cũng có thể dùng `nusesr-fit-pca`, `nusesr-train`, `nusesr-test`. Tham số CLI ghi đè giá trị YAML; xem các lựa chọn với `--help`.
@@ -221,6 +223,8 @@ Sau khi cài package, cũng có thể dùng `nusesr-fit-pca`, `nusesr-train`, `n
 Mọi dataset trả sample gồm `input`, `target`, `id`, `meta`, `extras`; loader stack tensor và giữ metadata theo từng sample. Train/PCA/test dùng chung schema. Chọn dataset mới bằng `train_dataset`/`val_dataset`/`test_dataset` và kwargs constructor trong YAML. Xem [giao diện dữ liệu và cách thêm dataset](docs/data_contract.md).
 
 Train dùng crop HR ngẫu nhiên (mặc định 256×256), flip/rotate và `repeat` lượt lấy mẫu cho mỗi ảnh trong mỗi epoch. LR được tạo sau augmentation bằng `avg_pool2d`. Sampling dựa trên seed, epoch và index; `workers=0` là cấu hình khởi đầu dùng được trên Windows.
+
+Configure on-the-fly LR generation under `data.resize`: `method`, `size: [height, width]`, and `antialias`. See [experiment configuration](docs/configuration.md).
 
 Validation/test dùng toàn ảnh, cắt phần dư ở cạnh dưới/phải để kích thước chia hết cho scale, không resize. Batch size luôn bằng 1 vì các ảnh có kích thước khác nhau. `test.py` cần HR để tính metric; nếu đánh giá test độc lập, trỏ `--hr-dir` tới thư mục HR tương ứng. Cấu hình mẫu hiện đánh giá DIV2K validation, không phải test độc lập.
 

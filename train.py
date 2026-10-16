@@ -45,7 +45,7 @@ def main():
     parser.add_argument("--shave", type=int, default=0)
     parser.add_argument("--device", default="auto")
     parser.add_argument("--augment", action=argparse.BooleanOptionalAction, default=True)
-    args = parse_args(parser)
+    args = parse_args(parser, stage="train")
     if not args.basis:
         parser.error("basis is required (CLI or YAML)")
     if min(args.epochs, args.val_every, args.log_every, args.checkpoint_every) < 1:

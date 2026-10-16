@@ -26,11 +26,10 @@ def train_one_epoch(model, loader, optimizer, device, *, grad_clip=1.0,
         optimizer.step()
         weighted_loss += loss.item() * hr.numel()
         pixels += hr.numel()
-        if log_every and (step % log_every == 0 or step == len(loader)):
-            if step % log_every == 0:
-                print(f"epoch {epoch} batch {step} loss={loss.item():.6f}", flush=True)
-            if on_step:
-                on_step(step, len(loader), loss.item())
+        if log_every and step % log_every == 0:
+            print(f"epoch {epoch} batch {step} loss={loss.item():.6f}", flush=True)
+        if on_step:
+            on_step(step, len(loader), loss.item(), lr, hr)
     if not pixels:
         raise ValueError("Training loader is empty")
     return {"train_coefficient_image_mse": weighted_loss / pixels}

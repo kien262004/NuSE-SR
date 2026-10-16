@@ -228,9 +228,11 @@ bash scripts/train.sh
 bash scripts/test.sh
 ```
 
-Training logs batch and epoch loss, learning rate, and validation metrics. Test
-runs log summary metrics and a per-image metrics table. Runs use the `NuSE-SR`
-project by default; change `logging.project`, `logging.entity`, `logging.name`,
+Training logs batch and epoch loss, learning rate, and validation metrics. It
+also logs a train LR/SR/HR preview every 1000 batches and up to four validation
+SR/HR pairs after each validation. Test runs log summary metrics and a per-image
+metrics table. Runs use the `NuSE-SR` project by default; change
+`logging.project`, `logging.entity`, `logging.name`,
 `logging.mode`, or `logging.tags` in the relevant YAML config. Set
 `logging.enabled: false` to disable W&B while keeping local CSV/JSON outputs.
 

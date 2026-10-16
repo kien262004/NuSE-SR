@@ -113,11 +113,29 @@ def main():
         set_dataset_epoch(train_data, epoch)
         train_loader.generator.manual_seed(args.seed + epoch)
         current_lr = optimizer.param_groups[0]["lr"]
-        def log_batch(step, total_steps, loss):
-            if wandb_run is not None:
-                wandb_run.log({"global_step": (epoch - 1) * len(train_loader) + step,
+        def log_batch(step, total_steps, loss, lr, hr):
+            global_step = (epoch - 1) * len(train_loader) + step
+            if wandb_run is not None and (step % args.log_every == 0 or step == total_steps):
+                wandb_run.log({"global_step": global_step,
                                "epoch": epoch, "train/batch_loss": loss,
                                "train/batch": step, "train/batches_per_epoch": total_steps})
+            if wandb_run is not None and global_step % 1000 == 0:
+                was_training = model.training
+                model.eval()
+                with torch.no_grad():
+                    preview_lr, preview_hr = lr[:1], hr[:1]
+                    preview_sr = model(preview_lr)
+                    preview_base = model.operator.pseudoinverse(preview_lr)
+                model.train(was_training)
+                wandb_run.log({
+                    "global_step": global_step,
+                    "train/lr_base": wandb.Image(preview_base[0].detach().cpu().clamp(0, 1),
+                                                   caption=f"Train step {global_step}: repeated LR"),
+                    "train/sr": wandb.Image(preview_sr[0].detach().cpu().clamp(0, 1),
+                                             caption=f"Train step {global_step}: SR"),
+                    "train/hr": wandb.Image(preview_hr[0].detach().cpu().clamp(0, 1),
+                                             caption=f"Train step {global_step}: HR target"),
+                })
 
         train_metrics = train_one_epoch(model, train_loader, optimizer, device,
                                        grad_clip=args.grad_clip, epoch=epoch,
@@ -128,7 +146,13 @@ def main():
                          "train/epoch_loss": train_metrics["train_coefficient_image_mse"],
                          "train/lr": current_lr}
         if epoch % args.val_every == 0 or epoch == args.epochs:
-            summary, rows = evaluate(model, val_loader, device, shave=args.shave)
+            validation_images = []
+            def collect_validation_image(row, sr, hr):
+                if wandb_run is not None and len(validation_images) < 4:
+                    validation_images.append((row["name"], sr.detach().cpu(), hr.detach().cpu()))
+
+            summary, rows = evaluate(model, val_loader, device, shave=args.shave,
+                                     on_image=collect_validation_image)
             record["validation"] = summary
             write_json(output / "validation" / f"epoch_{epoch:04d}.json", summary)
             write_csv(output / "validation" / f"epoch_{epoch:04d}.csv", rows)
@@ -139,6 +163,11 @@ def main():
             wandb_metrics.update({f"validation/{key}": summary[key]
                                   for key in ("rgb_psnr", "rgb_ssim", "rgb_mse", "oracle_psnr",
                                               "dc_max_abs", "decomposition_abs")})
+            for index, (name, sr, hr) in enumerate(validation_images, 1):
+                wandb_metrics[f"validation/image_{index:02d}_sr"] = wandb.Image(
+                    sr.clamp(0, 1), caption=f"Epoch {epoch}: {name} SR")
+                wandb_metrics[f"validation/image_{index:02d}_hr"] = wandb.Image(
+                    hr.clamp(0, 1), caption=f"Epoch {epoch}: {name} HR")
         if wandb_run is not None:
             wandb_run.log(wandb_metrics)
         history.append(record)

@@ -10,7 +10,7 @@ from .data import supervised_batch
 
 
 @torch.no_grad()
-def evaluate(model, loader, device, *, shave=0, image_dir=None):
+def evaluate(model, loader, device, *, shave=0, image_dir=None, on_image=None):
     was_training = model.training
     model.eval()
     rows = []
@@ -48,6 +48,8 @@ def evaluate(model, loader, device, *, shave=0, image_dir=None):
             total_pixels += hr.numel()
             if image_dir:
                 save_rgb(Path(image_dir) / f"{len(rows):05d}_{Path(row['name']).stem}.png", sr[0])
+            if on_image:
+                on_image(row, sr[0], hr[0])
     finally:
         model.train(was_training)
     if not rows:

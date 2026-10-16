@@ -20,8 +20,10 @@ logging:
 
 Install the optional dependency with `python -m pip install -e '.[wandb]'`, then
 authenticate once with `wandb login` or provide `WANDB_API_KEY` through the
-server's secret manager. Training sends batch loss and epoch validation metrics;
-evaluation sends summary metrics and a per-image metrics table.
+server's secret manager. Training sends batch loss and epoch validation metrics,
+a train LR/SR/HR preview every 1000 batches, and up to four validation SR/HR
+pairs after each validation. Evaluation sends summary metrics and a per-image
+metrics table.
 
 ```yaml
 model:

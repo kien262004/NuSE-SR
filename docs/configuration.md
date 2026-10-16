@@ -1,10 +1,27 @@
 # Experiment configuration
 
 Each experiment YAML has three main sections: `model`, `data`, and `train`.
-Optional sections are `pca`, `evaluation`, `runtime`, and `metadata`.
+Optional sections are `pca`, `evaluation`, `runtime`, `logging`, and `metadata`.
 The same file can be passed to `fit_pca.py`, `train.py`, and `test.py`;
 each command selects its own settings. CLI arguments override YAML defaults.
 Legacy flat YAML files are still accepted.
+
+Training and evaluation also accept an optional `logging` section for W&B:
+
+```yaml
+logging:
+  enabled: true
+  project: NuSE-SR
+  entity: null
+  name: null
+  mode: online
+  tags: [div2k, x4]
+```
+
+Install the optional dependency with `python -m pip install -e '.[wandb]'`, then
+authenticate once with `wandb login` or provide `WANDB_API_KEY` through the
+server's secret manager. Training sends batch loss and epoch validation metrics;
+evaluation sends summary metrics and a per-image metrics table.
 
 ```yaml
 model:

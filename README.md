@@ -216,6 +216,24 @@ bash scripts/test.sh
 
 The scripts use the default configs under `configs/`; edit the YAML files to change paths or settings.
 
+### Weights & Biases
+
+Training and evaluation configs enable W&B logging by default. Install the
+optional dependency and authenticate once before running:
+
+```bash
+python -m pip install -e '.[wandb]'
+wandb login
+bash scripts/train.sh
+bash scripts/test.sh
+```
+
+Training logs batch and epoch loss, learning rate, and validation metrics. Test
+runs log summary metrics and a per-image metrics table. Runs use the `NuSE-SR`
+project by default; change `logging.project`, `logging.entity`, `logging.name`,
+`logging.mode`, or `logging.tags` in the relevant YAML config. Set
+`logging.enabled: false` to disable W&B while keeping local CSV/JSON outputs.
+
 Sau khi cài package, cũng có thể dùng `nusesr-fit-pca`, `nusesr-train`, `nusesr-test`. Tham số CLI ghi đè giá trị YAML; xem các lựa chọn với `--help`.
 
 ### Dataloader

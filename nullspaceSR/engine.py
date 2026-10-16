@@ -6,7 +6,7 @@ from .losses import coefficient_image_mse
 
 
 def train_one_epoch(model, loader, optimizer, device, *, grad_clip=1.0,
-                    epoch=1, log_every=100):
+                    epoch=1, log_every=100, on_step=None):
     model.train()
     weighted_loss, pixels = 0.0, 0
     for step, batch in enumerate(loader, 1):
@@ -26,8 +26,11 @@ def train_one_epoch(model, loader, optimizer, device, *, grad_clip=1.0,
         optimizer.step()
         weighted_loss += loss.item() * hr.numel()
         pixels += hr.numel()
-        if log_every and step % log_every == 0:
-            print(f"epoch {epoch} batch {step} loss={loss.item():.6f}", flush=True)
+        if log_every and (step % log_every == 0 or step == len(loader)):
+            if step % log_every == 0:
+                print(f"epoch {epoch} batch {step} loss={loss.item():.6f}", flush=True)
+            if on_step:
+                on_step(step, len(loader), loss.item())
     if not pixels:
         raise ValueError("Training loader is empty")
     return {"train_coefficient_image_mse": weighted_loss / pixels}

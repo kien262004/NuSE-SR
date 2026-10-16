@@ -5,7 +5,7 @@ from copy import deepcopy
 def command_defaults(config, stage, allowed):
     if not isinstance(config, dict):
         raise ValueError("YAML config must be a mapping")
-    sections = {"model", "data", "train", "pca", "evaluation", "runtime", "metadata"}
+    sections = {"model", "data", "train", "pca", "evaluation", "runtime", "logging", "metadata"}
     if not (set(config) & sections):
         unknown = set(config) - allowed
         if unknown:
@@ -28,6 +28,7 @@ def command_defaults(config, stage, allowed):
         "pca": {"output", "batch_size", "repeat", "augment"},
         "evaluation": {"output", "shave", "save_images"},
         "runtime": {"seed", "device"},
+        "logging": {"enabled", "project", "entity", "name", "mode", "tags"},
     }
     for section, accepted in keys.items():
         values = config.get(section, {})
@@ -41,6 +42,12 @@ def command_defaults(config, stage, allowed):
     for section in active:
         defaults.update({k: deepcopy(v) for k, v in config.get(section, {}).items()
                          if k in allowed})
+    logging_names = {"enabled": "wandb_enabled", "project": "wandb_project",
+                     "entity": "wandb_entity", "name": "wandb_name",
+                     "mode": "wandb_mode", "tags": "wandb_tags"}
+    defaults.update({logging_names[key]: deepcopy(value)
+                     for key, value in config.get("logging", {}).items()
+                     if logging_names[key] in allowed})
     resize = config.get("data", {}).get("resize")
     if resize is not None:
         if not isinstance(resize, dict):

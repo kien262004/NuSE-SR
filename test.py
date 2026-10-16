@@ -10,6 +10,7 @@ import torch
 from nullspaceSR.data import build_dataset, make_loader, add_dataset_arguments, dataset_manifest
 from nullspaceSR.evaluation import evaluate
 from nullspaceSR.utils import get_device, model_from_checkpoint, parse_args, sha256, write_csv, write_json
+from nullspaceSR.tracking import add_wandb_arguments, init_wandb
 
 
 def main():
@@ -22,6 +23,7 @@ def main():
     parser.add_argument("--workers", type=int, default=0)
     parser.add_argument("--shave", type=int, default=0)
     parser.add_argument("--save-images", action=argparse.BooleanOptionalAction, default=False)
+    add_wandb_arguments(parser)
     args = parse_args(parser, stage="evaluation")
     if not args.checkpoint:
         parser.error("checkpoint is required (CLI or YAML)")
@@ -42,6 +44,15 @@ def main():
     print(f"{summary['images']} images: RGB PSNR={summary['rgb_psnr']:.4f}, "
           f"SSIM={summary['rgb_ssim']:.6f}, DC max={summary['dc_max_abs']:.3e}")
     print(f"Results: {output}")
+    wandb, wandb_run = init_wandb(args, job_type="test")
+    if wandb_run is not None:
+        wandb_run.log({f"test/{key}": value for key, value in summary.items()
+                       if isinstance(value, (int, float))})
+        table = wandb.Table(columns=["image", "rgb_psnr", "rgb_ssim", "rgb_mse"])
+        for row in rows:
+            table.add_data(row["name"], row["rgb_psnr"], row["rgb_ssim"], row["rgb_mse"])
+        wandb_run.log({"test/per_image_metrics": table})
+        wandb_run.finish()
 
 
 if __name__ == "__main__":

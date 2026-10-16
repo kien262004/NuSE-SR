@@ -15,6 +15,7 @@ from nullspaceSR.models import IMDN, NuSESR
 from nullspaceSR.pca import BlockNullSpacePCA
 from nullspaceSR.utils import (get_device, model_from_checkpoint, parse_args, restore_rng,
                     rng_state, save_checkpoint, seed_everything, sha256, write_csv, write_json)
+from nullspaceSR.tracking import add_wandb_arguments, init_wandb
 
 
 def main():
@@ -45,6 +46,7 @@ def main():
     parser.add_argument("--shave", type=int, default=0)
     parser.add_argument("--device", default="auto")
     parser.add_argument("--augment", action=argparse.BooleanOptionalAction, default=True)
+    add_wandb_arguments(parser)
     args = parse_args(parser, stage="train")
     if not args.basis:
         parser.error("basis is required (CLI or YAML)")
@@ -106,14 +108,25 @@ def main():
     architecture = {"name": "NuSESR", "scale": args.scale, "rank": args.rank,
                     "channels": decoder.channels, "width": args.width}
     print(f"Training {architecture} on {device}; {len(train_loader)} batches/epoch", flush=True)
+    wandb, wandb_run = init_wandb(args, job_type="train")
     for epoch in range(start_epoch, args.epochs + 1):
         set_dataset_epoch(train_data, epoch)
         train_loader.generator.manual_seed(args.seed + epoch)
         current_lr = optimizer.param_groups[0]["lr"]
+        def log_batch(step, total_steps, loss):
+            if wandb_run is not None:
+                wandb_run.log({"global_step": (epoch - 1) * len(train_loader) + step,
+                               "epoch": epoch, "train/batch_loss": loss,
+                               "train/batch": step, "train/batches_per_epoch": total_steps})
+
         train_metrics = train_one_epoch(model, train_loader, optimizer, device,
-                                       grad_clip=args.grad_clip, epoch=epoch, log_every=args.log_every)
+                                       grad_clip=args.grad_clip, epoch=epoch,
+                                       log_every=args.log_every, on_step=log_batch)
         record = {"epoch": epoch, "lr": current_lr, **train_metrics}
         improved = False
+        wandb_metrics = {"global_step": epoch * len(train_loader), "epoch": epoch,
+                         "train/epoch_loss": train_metrics["train_coefficient_image_mse"],
+                         "train/lr": current_lr}
         if epoch % args.val_every == 0 or epoch == args.epochs:
             summary, rows = evaluate(model, val_loader, device, shave=args.shave)
             record["validation"] = summary
@@ -123,6 +136,11 @@ def main():
             if improved:
                 best_psnr = summary["rgb_psnr"]
             print(f"epoch {epoch}: val PSNR={summary['rgb_psnr']:.4f}, DC={summary['dc_max_abs']:.3e}", flush=True)
+            wandb_metrics.update({f"validation/{key}": summary[key]
+                                  for key in ("rgb_psnr", "rgb_ssim", "rgb_mse", "oracle_psnr",
+                                              "dc_max_abs", "decomposition_abs")})
+        if wandb_run is not None:
+            wandb_run.log(wandb_metrics)
         history.append(record)
         scheduler.step()
         state = {"format_version": 2, "epoch": epoch, "architecture": architecture,
@@ -138,6 +156,8 @@ def main():
             save_checkpoint(output / "best.pt", state)
         write_json(output / "history.json", history)
         print(f"epoch {epoch} complete; train loss={record['train_coefficient_image_mse']:.6f}", flush=True)
+    if wandb_run is not None:
+        wandb_run.finish()
 
 
 if __name__ == "__main__":

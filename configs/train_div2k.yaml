@@ -52,3 +52,8 @@ evaluation:
 runtime:
   device: auto
   seed: 2026
+logging:
+  enabled: true
+  project: NuSE-SR
+  mode: online
+  tags: [div2k, x4]

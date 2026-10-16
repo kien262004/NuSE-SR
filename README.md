@@ -1,5 +1,15 @@
 # NuSESR
 
+Null space là plugin tùy chọn qua `model.null_space` trong YAML:
+
+- `true`: head hệ số PCA + decoder cố định, cần `model.basis` và LR average pooling.
+- `false`: head Conv + PixelShuffle của IMDN, học trực tiếp ảnh HR bằng image MSE,
+  không cần fit PCA. Có thể dùng LR bicubic với `configs/train_div2k_bicubic.yaml`.
+
+Nếu bỏ `null_space`, có `basis` thì dùng PCA (tương thích config cũ), không có
+`basis` thì dùng miền ảnh. Train, resume và test đều hỗ trợ hai chế độ;
+checkpoint lưu chế độ model. Xem [cấu hình chi tiết](docs/configuration.md).
+
 **Siêu phân giải ảnh bằng cách dự đoán hệ số PCA và tổng hợp trực tiếp trong null space.**
 
 NuSESR là project nghiên cứu bằng PyTorch. Mạng nhận ảnh độ phân giải thấp (LR), dự đoán các bản đồ hệ số PCA, rồi dùng decoder cố định để tạo thành phần chi tiết thuộc null space của toán tử đo. Ảnh SR được tạo bằng cách cộng chi tiết này với thành phần tái tạo từ LR.

@@ -1,0 +1,62 @@
+# PCA null-space with bicubic LR: experimental, rejected by the current
+# average-pool measurement consistency check during PCA fitting/train/evaluation.
+# Shared experiment config: model, data, train, plus PCA/evaluation/runtime.
+model:
+  null_space: true
+  scale: 4
+  rank: 8
+  width: 64
+  basis: basis/avgpool_x4_rank8.pt
+  checkpoint: runs/nusesr_x4_k8_bicubic/best.pt
+data:
+  train_dataset: div2k
+  val_dataset: div2k
+  test_dataset: div2k
+  train_hr: /home/admin_mcn/scdc_data/data_bundle/phase1_seven_extra/div2k_train/DIV2K_train_HR
+  val_hr: /home/admin_mcn/scdc_data/data_bundle/phase1_seven_extra/div2k_valid/DIV2K_valid_HR
+  hr_dir: /home/admin_mcn/scdc_data/data_bundle/phase1_seven_extra/div2k_valid/DIV2K_valid_HR
+
+  resize:
+    method: bicubic
+    size:
+    - 64
+    - 64
+    antialias: true
+  val_dataset_options:
+    resize:
+      size: null
+  test_dataset_options:
+    resize:
+      size: null
+  crop_size: 256
+  repeat: 20
+  augment: true
+  workers: 0
+train:
+  output: runs/nusesr_x4_k8_bicubic
+  epochs: 100
+  batch_size: 128
+  lr: 0.001
+  min_lr: 1.0e-06
+  weight_decay: 0.0
+  grad_clip: 1.0
+  val_every: 1
+  log_every: 100
+  checkpoint_every: 10
+pca:
+  output: basis/avgpool_x4_rank8.pt
+  batch_size: 8
+  repeat: 4
+  augment: false
+evaluation:
+  output: results/nusesr_x4_k8_bicubic_validation
+  shave: 0
+  save_images: false
+runtime:
+  device: auto
+  seed: 2026
+logging:
+  enabled: true
+  project: NuSE-SR
+  mode: online
+  tags: [div2k, x4, bicubic, null_space]

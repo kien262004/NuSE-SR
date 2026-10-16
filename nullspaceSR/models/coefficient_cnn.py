@@ -1,4 +1,4 @@
-"""IMDN-style LR-domain predictor for NuSESR PCA coefficients."""
+"""IMDN backbone with image or PCA coefficient output heads."""
 import torch
 from torch import Tensor, nn
 
@@ -59,16 +59,12 @@ class InformationMultiDistillationBlock(nn.Module):
 
 
 class IMDN(nn.Module):
-    """IMDN feature extractor with a NuSESR coefficient output head.
+    """Six IMDBs with PixelShuffle, or a coefficient head when rank is set."""
 
-    The feature stem, six IMDBs, feature fusion, and LR residual follow IMDN.
-    Only its RGB upsampling head is replaced: this head emits ``channels *
-    rank`` coefficient maps at LR resolution for NuSESR's fixed decoder.
-    """
-
-    def __init__(self, channels: int = 3, rank: int = 8, width: int = 64) -> None:
+    def __init__(self, channels: int = 3, rank: int | None = None,
+                 width: int = 64, *, scale: int = 4) -> None:
         super().__init__()
-        if min(channels, rank) < 1:
+        if channels < 1 or (rank is not None and rank < 1):
             raise ValueError("channels and rank must be positive")
         if width < 2:
             raise ValueError("width must be at least 2 for channel distillation")
@@ -76,6 +72,9 @@ class IMDN(nn.Module):
         self.channels = channels
         self.rank = rank
         self.width = width
+        if not isinstance(scale, int) or isinstance(scale, bool) or scale < 1:
+            raise ValueError("scale must be a positive integer")
+        self.scale = scale
         self.num_modules = 6
         self.feature = nn.Conv2d(channels, width, 3, padding=1)
         self.blocks = nn.ModuleList(
@@ -86,7 +85,13 @@ class IMDN(nn.Module):
             nn.LeakyReLU(0.05, inplace=True),
         )
         self.lr_conv = nn.Conv2d(width, width, 3, padding=1)
-        self.coefficient_head = nn.Conv2d(width, channels * rank, 3, padding=1)
+        if rank is None:
+            self.image_head = nn.Sequential(
+                nn.Conv2d(width, channels * scale**2, 3, padding=1),
+                nn.PixelShuffle(scale),
+            )
+        else:
+            self.coefficient_head = nn.Conv2d(width, channels * rank, 3, padding=1)
 
     def forward(self, lr: Tensor) -> Tensor:
         features = self.feature(lr)
@@ -97,8 +102,12 @@ class IMDN(nn.Module):
             block_outputs.append(x)
         x = self.fusion(torch.cat(block_outputs, dim=1))
         x = self.lr_conv(x) + features
-        return self.coefficient_head(x)
+        return self.image_head(x) if self.rank is None else self.coefficient_head(x)
 
 
 # Backward-compatible name for existing configs and user code.
-SmallCoefficientCNN = IMDN
+class SmallCoefficientCNN(IMDN):
+    """Legacy coefficient predictor retaining its default rank."""
+
+    def __init__(self, channels: int = 3, rank: int = 8, width: int = 64) -> None:
+        super().__init__(channels, rank, width)

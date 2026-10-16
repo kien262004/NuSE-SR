@@ -12,6 +12,49 @@ from PIL import Image
 
 
 class PipelineTest(unittest.TestCase):
+    def test_image_space_bicubic_training_resume_and_evaluation(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for split in ("train", "val"):
+                (root / split).mkdir()
+                pixels = bytes((i * 13) % 256 for i in range(16 * 20 * 3))
+                Image.frombytes("RGB", (20, 16), pixels).save(root / split / "image.png")
+            config = root / "image.yaml"
+            # Omitting both null_space and basis must select image mode.
+            config.write_text(json.dumps({
+                "model": {"scale": 2, "width": 4},
+                "data": {"train_hr": (root / "train").as_posix(),
+                         "val_hr": (root / "val").as_posix(),
+                         "resize": {"method": "bicubic"},
+                         "crop_size": 16, "repeat": 1},
+                "train": {"epochs": 2, "batch_size": 1, "checkpoint_every": 1},
+                "runtime": {"device": "cpu"}}))
+            def run(module, *arguments):
+                result = subprocess.run([sys.executable, "-m", module, *map(str, arguments)],
+                                        capture_output=True, text=True, timeout=90,
+                                        env={**os.environ, "OMP_NUM_THREADS": "1", "MKL_NUM_THREADS": "1"})
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            output, resumed = root / "run", root / "resumed"
+            run("train", "--config", config, "--output", output)
+            state = torch.load(output / "last.pt", weights_only=True)
+            self.assertFalse(state["architecture"]["null_space"])
+            self.assertIsNone(state["basis_sha256"])
+            self.assertIn("train_image_mse", state["history"][0])
+            self.assertFalse(any(key.startswith("decoder.") for key in state["model"]))
+            run("train", "--config", config, "--output", resumed,
+                "--resume", output / "epoch_0001.pt", "--no-null-space",
+                "--basis", root / "unused_missing_basis.pt")
+            restored = torch.load(resumed / "last.pt", weights_only=True)
+            for key in state["model"]:
+                torch.testing.assert_close(state["model"][key], restored["model"][key], rtol=0, atol=0)
+            run("test", "--config", config, "--checkpoint", output / "best.pt",
+                "--hr-dir", root / "val", "--output", root / "results", "--save-images")
+            summary = json.loads((root / "results" / "metrics.json").read_text())["summary"]
+            self.assertIn("rgb_psnr", summary)
+            self.assertNotIn("oracle_psnr", summary)
+            self.assertNotIn("dc_max_abs", summary)
+            self.assertTrue((root / "results" / "images" / "00001_image.png").is_file())
+
     def test_end_to_end_and_resume(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

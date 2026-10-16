@@ -10,11 +10,37 @@ from nullspaceSR import (
     AveragePoolSR, BlockNullSpacePCA, NuSESR,
     IMDN, block_null_basis, coefficient_image_mse,
 )
+from nullspaceSR.utils import model_from_checkpoint
+from nullspaceSR.configuration import command_defaults
 
 
 class NullSpaceTests(unittest.TestCase):
     def setUp(self):
         torch.manual_seed(42)
+
+    def test_image_head_and_explicit_config_switch(self):
+        defaults = command_defaults({"model": {"null_space": False, "channels": 1}},
+                                    "train", {"null_space", "channels"})
+        self.assertEqual(defaults, {"null_space": False, "channels": 1})
+        for scale in (2, 3, 4):
+            model = NuSESR(IMDN(channels=1, width=4, scale=scale))
+            lr = torch.rand(2, 1, 3, 5)
+            sr = model(lr)
+            self.assertEqual(tuple(sr.shape), (2, 1, 3 * scale, 5 * scale))
+            self.assertIsNone(model.operator)
+            sr.square().mean().backward()
+            self.assertIsNotNone(model.predictor.image_head[0].weight.grad)
+            with self.assertRaisesRegex(RuntimeError, "plugin"):
+                model.predict_coefficients(lr)
+
+    def test_legacy_checkpoint_without_mode_flag(self):
+        decoder = BlockNullSpacePCA.fit([torch.rand(1, 3, 8, 8)], scale=2, rank=2)
+        model = NuSESR(IMDN(3, 2, width=4), decoder)
+        restored = model_from_checkpoint({
+            "architecture": {"scale": 2, "rank": 2, "channels": 3, "width": 4},
+            "model": model.state_dict()})
+        lr = torch.rand(1, 3, 4, 4)
+        torch.testing.assert_close(restored(lr), model(lr))
 
     def test_analytic_basis(self):
         for scale in (2, 4):

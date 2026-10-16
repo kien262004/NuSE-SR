@@ -27,6 +27,7 @@ metrics table.
 
 ```yaml
 model:
+  null_space: true
   scale: 4
   rank: 8
   width: 64
@@ -71,10 +72,29 @@ Per-split `train_dataset_options.resize`, `val_dataset_options.resize`, and
 Global resize settings apply to the built-in `div2k`/`hr_folder` datasets;
 custom datasets retain their own constructor options.
 
-`configs/train_div2k_bicubic.yaml` selects bicubic generation in the dataloader.
-Model functions remain unchanged. The current NuSESR training/evaluation still
-requires `input == AveragePoolSR(target)` and will reject bicubic pairs.
-Use the average-pool config for the current coefficient training pipeline.
+`model.null_space` selects the output domain:
+
+- `true`: predict LR coefficient maps, decode using frozen PCA, and add the
+  repeated LR base. Requires `model.basis` and average-pool pairs. Training uses
+  coefficient SSE normalized per HR pixel, as before.
+- `false`: use IMDN's Conv + PixelShuffle image head and train against HR with
+  image MSE. No PCA file is loaded; bicubic, bilinear, and custom pairs are allowed.
+
+When omitted, supplying `model.basis` enables PCA for compatibility with older
+configs; otherwise image-space IMDN is used. `--null-space` / `--no-null-space`
+override YAML. `model.channels` defaults to 3 in image mode; PCA mode derives
+channels from the basis. `rank` is only used in PCA mode.
+
+`IMDN(channels=3, scale=4)` directly returns an HR image.
+`IMDN(channels=3, rank=8)` retains the LR coefficient head.
+`NuSESR(predictor, decoder=None)` wraps image-space prediction; passing a
+`BlockNullSpacePCA` decoder installs the null-space plugin.
+
+`configs/train_div2k_bicubic.yaml` is a complete image-space preset. Run train
+and test directly, without fitting PCA. Checkpoints record the selected mode,
+and evaluation automatically restores it without an external basis file.
+Oracle, coefficient, and null-space consistency metrics are reported only in
+PCA mode; both modes report image quality and output-range metrics.
 
 ```bash
 python fit_pca.py --config configs/train_div2k.yaml

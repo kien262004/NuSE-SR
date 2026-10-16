@@ -1,4 +1,4 @@
-"""Train the coefficient predictor with a fixed block-null-space PCA decoder."""
+"""Train IMDN in image space or with the optional fixed PCA null-space plugin."""
 import argparse
 import os
 from pathlib import Path
@@ -23,6 +23,9 @@ def main():
     parser.add_argument("--train-hr")
     parser.add_argument("--val-hr")
     parser.add_argument("--basis")
+    parser.add_argument("--null-space", action=argparse.BooleanOptionalAction, default=None,
+                        help="Enable PCA plugin (default: enabled when basis is supplied)")
+    parser.add_argument("--channels", type=int, default=3)
     add_dataset_arguments(parser, "train")
     add_dataset_arguments(parser, "val")
     parser.add_argument("--output", default="runs/nusesr_x4_k8")
@@ -48,8 +51,11 @@ def main():
     parser.add_argument("--augment", action=argparse.BooleanOptionalAction, default=True)
     add_wandb_arguments(parser)
     args = parse_args(parser, stage="train")
-    if not args.basis:
-        parser.error("basis is required (CLI or YAML)")
+    if args.null_space is not None and not isinstance(args.null_space, bool):
+        parser.error("null_space must be true or false")
+    args.null_space = bool(args.basis) if args.null_space is None else args.null_space
+    if args.null_space and not args.basis:
+        parser.error("basis is required when null_space is enabled")
     if min(args.epochs, args.val_every, args.log_every, args.checkpoint_every) < 1:
         parser.error("epochs, val_every, log_every and checkpoint_every must be positive")
     if args.lr <= 0 or not 0 <= args.min_lr <= args.lr or args.weight_decay < 0 or args.grad_clip < 0:
@@ -68,15 +74,23 @@ def main():
     manifest = {"train": dataset_manifest(train_data), "validation": dataset_manifest(val_data)}
     if set(manifest["train"].get("sources", [])) & set(manifest["validation"].get("sources", [])):
         raise ValueError("Train and validation image paths overlap")
-    decoder = BlockNullSpacePCA.load(args.basis)
-    if (decoder.scale, decoder.rank) != (args.scale, args.rank):
-        raise ValueError("Basis scale/rank do not match training configuration")
-    model = NuSESR(IMDN(decoder.channels, args.rank, args.width), decoder)
-    basis_hash = sha256(args.basis)
+    if args.null_space:
+        decoder = BlockNullSpacePCA.load(args.basis)
+        if (decoder.scale, decoder.rank) != (args.scale, args.rank):
+            raise ValueError("Basis scale/rank do not match training configuration")
+        model = NuSESR(IMDN(decoder.channels, args.rank, args.width), decoder)
+        basis_hash = sha256(args.basis)
+    else:
+        model = NuSESR(IMDN(args.channels, width=args.width, scale=args.scale))
+        basis_hash = None
     checkpoint = None
     start_epoch, best_psnr, history = 1, float("-inf"), []
     if args.resume:
         checkpoint = torch.load(args.resume, map_location="cpu", weights_only=True)
+        if checkpoint["architecture"].get("null_space", True) != args.null_space:
+            raise ValueError("Resume null_space mode differs from the checkpoint")
+        if checkpoint["architecture"]["channels"] != model.channels:
+            raise ValueError("Resume channels differ from the checkpoint")
         if checkpoint["basis_sha256"] != basis_hash:
             raise ValueError("Resume basis differs from the checkpoint basis")
         for key in ("scale", "rank", "width", "epochs", "seed", "batch_size", "crop_size",
@@ -105,8 +119,10 @@ def main():
                              pin_memory=device.type == "cuda")
     write_json(output / "config.json", vars(args))
     write_json(output / "manifest.json", manifest)
-    architecture = {"name": "NuSESR", "scale": args.scale, "rank": args.rank,
-                    "channels": decoder.channels, "width": args.width}
+    architecture = {"name": "NuSESR" if args.null_space else "IMDN",
+                    "null_space": args.null_space, "scale": args.scale,
+                    "rank": args.rank if args.null_space else None,
+                    "channels": model.channels, "width": args.width}
     print(f"Training {architecture} on {device}; {len(train_loader)} batches/epoch", flush=True)
     wandb, wandb_run = init_wandb(args, job_type="train")
     for epoch in range(start_epoch, args.epochs + 1):
@@ -125,7 +141,8 @@ def main():
                 with torch.no_grad():
                     preview_lr, preview_hr = lr[:1], hr[:1]
                     preview_sr = model(preview_lr)
-                    preview_base = model.operator.pseudoinverse(preview_lr)
+                    preview_base = torch.nn.functional.interpolate(
+                        preview_lr, scale_factor=model.scale, mode="nearest")
                 model.train(was_training)
                 wandb_run.log({
                     "global_step": global_step,
@@ -149,7 +166,7 @@ def main():
         record = {"epoch": epoch, "lr": current_lr, **train_metrics}
         improved = False
         wandb_metrics = {"global_step": epoch * len(train_loader), "epoch": epoch,
-                         "train/epoch_loss": train_metrics["train_coefficient_image_mse"],
+                         "train/epoch_loss": train_metrics[model.loss_name],
                          "train/lr": current_lr}
         if epoch % args.val_every == 0 or epoch == args.epochs:
             validation_images = []
@@ -168,13 +185,14 @@ def main():
             print(f"epoch {epoch}: val PSNR={summary['rgb_psnr']:.4f}, "
                   f"SR range=[{summary['sr_min']:.4f}, {summary['sr_max']:.4f}], "
                   f"below0={summary['sr_below_zero_fraction']:.1%}, "
-                  f"above1={summary['sr_above_one_fraction']:.1%}, "
-                  f"DC={summary['dc_max_abs']:.3e}", flush=True)
+                  f"above1={summary['sr_above_one_fraction']:.1%}", flush=True)
+            if model.uses_null_space:
+                print(f"DC={summary['dc_max_abs']:.3e}", flush=True)
             wandb_metrics.update({f"validation/{key}": summary[key]
                                   for key in ("rgb_psnr", "rgb_ssim", "rgb_mse", "oracle_psnr",
                                               "sr_min", "sr_max", "sr_mean",
                                               "sr_below_zero_fraction", "sr_above_one_fraction",
-                                              "dc_max_abs", "decomposition_abs")})
+                                              "dc_max_abs", "decomposition_abs") if key in summary})
             for index, (name, sr, hr) in enumerate(validation_images, 1):
                 wandb_metrics[f"validation/image_{index:02d}_sr"] = wandb_rgb_image(
                     wandb, sr, caption=f"Epoch {epoch}: {name} SR")
@@ -196,7 +214,7 @@ def main():
         if improved:
             save_checkpoint(output / "best.pt", state)
         write_json(output / "history.json", history)
-        print(f"epoch {epoch} complete; train loss={record['train_coefficient_image_mse']:.6f}", flush=True)
+        print(f"epoch {epoch} complete; train loss={record[model.loss_name]:.6f}", flush=True)
     if wandb_run is not None:
         wandb_run.finish()
 

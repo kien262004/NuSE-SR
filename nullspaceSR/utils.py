@@ -141,6 +141,11 @@ def model_from_checkpoint(checkpoint):
 
     arch = checkpoint["architecture"]
     state = checkpoint["model"]
+    # Older checkpoints always used PCA and have no null_space flag.
+    if not arch.get("null_space", True):
+        model = NuSESR(IMDN(arch["channels"], width=arch["width"], scale=arch["scale"]))
+        model.load_state_dict(state)
+        return model
     eigenvalues = state["decoder.eigenvalues"]
     decoder = BlockNullSpacePCA(arch["scale"], state["decoder.mean"],
                                state["decoder.components"],

@@ -1,11 +1,12 @@
 # Shared experiment config: model, data, train, plus PCA/evaluation/runtime.
-# Bicubic dataloader preset. Current NuSESR training checks require average_pool.
+# Image-space IMDN with bicubic LR inputs; no PCA fitting required.
 model:
+  null_space: false
+  channels: 3
   scale: 4
   rank: 8
   width: 64
-  basis: basis/avgpool_x4_rank8.pt
-  checkpoint: runs/nusesr_x4_k8/best.pt
+  checkpoint: runs/imdn_x4_bicubic/best.pt
 data:
   train_dataset: div2k
   val_dataset: div2k
@@ -30,7 +31,7 @@ data:
   augment: true
   workers: 0
 train:
-  output: runs/nusesr_x4_k8
+  output: runs/imdn_x4_bicubic
   epochs: 100
   batch_size: 128
   lr: 0.001
@@ -46,7 +47,7 @@ pca:
   repeat: 4
   augment: false
 evaluation:
-  output: results/nusesr_x4_k8_validation
+  output: results/imdn_x4_bicubic_validation
   shave: 0
   save_images: false
 runtime:

@@ -1,5 +1,6 @@
 # Shared experiment config: model, data, train, plus PCA/evaluation/runtime.
 model:
+  null_space: true
   scale: 4
   rank: 8
   width: 64

@@ -15,7 +15,7 @@ from nullspaceSR.models import IMDN, NuSESR
 from nullspaceSR.pca import BlockNullSpacePCA
 from nullspaceSR.utils import (get_device, model_from_checkpoint, parse_args, restore_rng,
                     rng_state, save_checkpoint, seed_everything, sha256, write_csv, write_json)
-from nullspaceSR.tracking import add_wandb_arguments, init_wandb
+from nullspaceSR.tracking import add_wandb_arguments, init_wandb, wandb_rgb_image
 
 
 def main():
@@ -119,7 +119,7 @@ def main():
                 wandb_run.log({"global_step": global_step,
                                "epoch": epoch, "train/batch_loss": loss,
                                "train/batch": step, "train/batches_per_epoch": total_steps})
-            if wandb_run is not None and global_step % 10 == 0:
+            if wandb_run is not None:
                 was_training = model.training
                 model.eval()
                 with torch.no_grad():
@@ -129,12 +129,18 @@ def main():
                 model.train(was_training)
                 wandb_run.log({
                     "global_step": global_step,
-                    "train/lr_base": wandb.Image(preview_base[0].detach().cpu().clamp(0, 1),
-                                                   caption=f"Train step {global_step}: repeated LR"),
-                    "train/sr": wandb.Image(preview_sr[0].detach().cpu().clamp(0, 1),
-                                             caption=f"Train step {global_step}: SR"),
-                    "train/hr": wandb.Image(preview_hr[0].detach().cpu().clamp(0, 1),
-                                             caption=f"Train step {global_step}: HR target"),
+                    "train/lr_base": wandb_rgb_image(
+                        wandb, preview_base[0], caption=f"Train step {global_step}: repeated LR"),
+                    "train/sr": wandb_rgb_image(
+                        wandb, preview_sr[0], caption=f"Train step {global_step}: SR"),
+                    "train/hr": wandb_rgb_image(
+                        wandb, preview_hr[0], caption=f"Train step {global_step}: HR target"),
+                    "train/hr_min": preview_hr.min().item(),
+                    "train/hr_max": preview_hr.max().item(),
+                    "train/hr_mean": preview_hr.mean().item(),
+                    "train/sr_min": preview_sr.min().item(),
+                    "train/sr_max": preview_sr.max().item(),
+                    "train/sr_mean": preview_sr.mean().item(),
                 })
 
         train_metrics = train_one_epoch(model, train_loader, optimizer, device,
@@ -159,15 +165,21 @@ def main():
             improved = summary["rgb_psnr"] > best_psnr
             if improved:
                 best_psnr = summary["rgb_psnr"]
-            print(f"epoch {epoch}: val PSNR={summary['rgb_psnr']:.4f}, DC={summary['dc_max_abs']:.3e}", flush=True)
+            print(f"epoch {epoch}: val PSNR={summary['rgb_psnr']:.4f}, "
+                  f"SR range=[{summary['sr_min']:.4f}, {summary['sr_max']:.4f}], "
+                  f"below0={summary['sr_below_zero_fraction']:.1%}, "
+                  f"above1={summary['sr_above_one_fraction']:.1%}, "
+                  f"DC={summary['dc_max_abs']:.3e}", flush=True)
             wandb_metrics.update({f"validation/{key}": summary[key]
                                   for key in ("rgb_psnr", "rgb_ssim", "rgb_mse", "oracle_psnr",
+                                              "sr_min", "sr_max", "sr_mean",
+                                              "sr_below_zero_fraction", "sr_above_one_fraction",
                                               "dc_max_abs", "decomposition_abs")})
             for index, (name, sr, hr) in enumerate(validation_images, 1):
-                wandb_metrics[f"validation/image_{index:02d}_sr"] = wandb.Image(
-                    sr.clamp(0, 1), caption=f"Epoch {epoch}: {name} SR")
-                wandb_metrics[f"validation/image_{index:02d}_hr"] = wandb.Image(
-                    hr.clamp(0, 1), caption=f"Epoch {epoch}: {name} HR")
+                wandb_metrics[f"validation/image_{index:02d}_sr"] = wandb_rgb_image(
+                    wandb, sr, caption=f"Epoch {epoch}: {name} SR")
+                wandb_metrics[f"validation/image_{index:02d}_hr"] = wandb_rgb_image(
+                    wandb, hr, caption=f"Epoch {epoch}: {name} HR")
         if wandb_run is not None:
             wandb_run.log(wandb_metrics)
         history.append(record)

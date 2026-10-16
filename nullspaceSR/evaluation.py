@@ -41,6 +41,11 @@ def evaluate(model, loader, device, *, shave=0, image_dir=None, on_image=None):
                    "truncation_mse": truncation,
                    "coefficient_image_mse": prediction,
                    "coefficient_mse": (predicted.double() - oracle_coeffs.double()).square().mean().item(),
+                   "sr_min": sr.min().item(),
+                   "sr_max": sr.max().item(),
+                   "sr_mean": sr.mean().item(),
+                   "sr_below_zero_fraction": (sr < 0).float().mean().item(),
+                   "sr_above_one_fraction": (sr > 1).float().mean().item(),
                    "dc_max_abs": (model.operator(sr) - lr).abs().max().item(),
                    "decomposition_abs": abs(full_mse - truncation - prediction)}
             rows.append(row)

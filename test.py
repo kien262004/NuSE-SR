@@ -42,7 +42,11 @@ def main():
     write_json(output / "metrics.json", report)
     write_csv(output / "per_image.csv", rows)
     print(f"{summary['images']} images: RGB PSNR={summary['rgb_psnr']:.4f}, "
-          f"SSIM={summary['rgb_ssim']:.6f}, DC max={summary['dc_max_abs']:.3e}")
+          f"SSIM={summary['rgb_ssim']:.6f}, "
+          f"SR range=[{summary['sr_min']:.4f}, {summary['sr_max']:.4f}], "
+          f"below0={summary['sr_below_zero_fraction']:.1%}, "
+          f"above1={summary['sr_above_one_fraction']:.1%}, "
+          f"DC max={summary['dc_max_abs']:.3e}")
     print(f"Results: {output}")
     wandb, wandb_run = init_wandb(args, job_type="test")
     if wandb_run is not None:

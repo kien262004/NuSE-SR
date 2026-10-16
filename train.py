@@ -119,7 +119,7 @@ def main():
                 wandb_run.log({"global_step": global_step,
                                "epoch": epoch, "train/batch_loss": loss,
                                "train/batch": step, "train/batches_per_epoch": total_steps})
-            if wandb_run is not None and global_step % 1000 == 0:
+            if wandb_run is not None and global_step % 10 == 0:
                 was_training = model.training
                 model.eval()
                 with torch.no_grad():

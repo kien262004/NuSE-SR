@@ -10,7 +10,8 @@ from .data import supervised_batch
 
 
 @torch.no_grad()
-def evaluate(model, loader, device, *, shave=0, image_dir=None, on_image=None):
+def evaluate(model, loader, device, *, shave=0, image_dir=None, on_image=None,
+             lpips_metric=None):
     was_training = model.training
     model.eval()
     rows = []
@@ -39,6 +40,11 @@ def evaluate(model, loader, device, *, shave=0, image_dir=None, on_image=None):
                    "sr_mean": sr.mean().item(),
                    "sr_below_zero_fraction": (sr < 0).float().mean().item(),
                    "sr_above_one_fraction": (sr > 1).float().mean().item()}
+            if lpips_metric is not None:
+                value = lpips_metric(sr, hr, shave).item()
+                if not torch.isfinite(torch.tensor(value)):
+                    raise FloatingPointError(f"Non-finite LPIPS for {batch['id'][0]}")
+                row["lpips"] = value
             if model.uses_null_space:
                 oracle_coeffs = model.decoder.encode_hr(hr)
                 oracle = model.operator.pseudoinverse(lr) + model.decoder(oracle_coeffs)
@@ -73,4 +79,8 @@ def evaluate(model, loader, device, *, shave=0, image_dir=None, on_image=None):
                                     if model.uses_null_space else
                                     "image mean; global_pixel_mse pixel weighted"),
                     "output_protocol": "raw RGB float, no clamp or quantization"})
+    if lpips_metric is not None:
+        summary["lpips_protocol"] = (
+            "LPIPS v0.1 AlexNet; same shave; clamp [0,1], map to [-1,1]; "
+            "grayscale replicated to RGB; no resize; image mean; lower is better")
     return summary, rows

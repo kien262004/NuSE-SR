@@ -6,6 +6,38 @@ The same file can be passed to `fit_pca.py`, `train.py`, and `test.py`;
 each command selects its own settings. CLI arguments override YAML defaults.
 Legacy flat YAML files are still accepted.
 
+Validation and test report RGB PSNR (higher is better), RGB SSIM (higher), and
+LPIPS (lower). Install perceptual metric dependencies before running:
+
+```bash
+python -m pip install -e ".[metrics]"
+```
+
+```yaml
+evaluation:
+  lpips: true
+  shave: 0
+```
+
+LPIPS is enabled by default in both CLIs and initialized once per run. The first
+run downloads pretrained AlexNet weights into the PyTorch cache. The metric uses
+[official LPIPS](https://github.com/richzhang/PerceptualSimilarity) v0.1 with
+AlexNet, frozen weights and evaluation mode. It clips each image to `[0,1]`,
+then maps to `[-1,1]`; PSNR/SSIM retain raw float outputs without clipping or
+quantization. All three apply the same `shave` and average per-image scores.
+LPIPS does not resize images; each side after shaving must be at least 32 pixels.
+Grayscale inputs are replicated to three channels for LPIPS.
+
+Use `--no-lpips` or `evaluation.lpips: false` for tiny fixtures or runs without
+perceptual metric dependencies. Missing dependencies/weights cause an explicit
+error when enabled; the metric is never silently omitted. LPIPS is written to
+JSON summaries, per-image CSV files, console output and W&B, alongside PSNR and
+SSIM. `best.pt` selection remains based on validation PSNR.
+
+For direct Python evaluation, create `LPIPSMetric().to(device)` once and pass
+it as `evaluate(..., lpips_metric=metric)`. Omitting this argument keeps the
+dependency-free PSNR/SSIM path.
+
 Training and evaluation also accept an optional `logging` section for W&B:
 
 ```yaml

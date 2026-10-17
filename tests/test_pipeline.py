@@ -30,6 +30,8 @@ class PipelineTest(unittest.TestCase):
                 "train": {"epochs": 2, "batch_size": 1, "checkpoint_every": 1},
                 "runtime": {"device": "cpu"}}))
             def run(module, *arguments):
+                if module in {"train", "test"}:
+                    arguments = (*arguments, "--no-lpips")
                 result = subprocess.run([sys.executable, "-m", module, *map(str, arguments)],
                                         capture_output=True, text=True, timeout=90,
                                         env={**os.environ, "OMP_NUM_THREADS": "1", "MKL_NUM_THREADS": "1"})
@@ -65,6 +67,8 @@ class PipelineTest(unittest.TestCase):
                     pixels = bytes((i * 13 + index * 17) % 256 for i in range(16 * 20 * 3))
                     Image.frombytes("RGB", (20, 16), pixels).save(folder / f"{index:04d}.png")
             def run(module, *arguments):
+                if module in {"train", "test"}:
+                    arguments = (*arguments, "--no-lpips")
                 result = subprocess.run([sys.executable, "-m", module, *map(str, arguments)],
                                         capture_output=True, text=True, timeout=90,
                                         env={**os.environ, "OMP_NUM_THREADS": "1", "MKL_NUM_THREADS": "1",
@@ -105,6 +109,8 @@ class PipelineTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             def run(module, *arguments):
+                if module in {"train", "test"}:
+                    arguments = (*arguments, "--no-lpips")
                 result = subprocess.run([sys.executable, "-m", module, *map(str, arguments)],
                                         capture_output=True, text=True, timeout=90,
                                         env={**os.environ, "OMP_NUM_THREADS": "1", "MKL_NUM_THREADS": "1",

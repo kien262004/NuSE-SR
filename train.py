@@ -11,6 +11,7 @@ from nullspaceSR.data import (build_dataset, make_loader, add_dataset_arguments,
                    dataset_manifest, set_dataset_epoch)
 from nullspaceSR.engine import train_one_epoch
 from nullspaceSR.evaluation import evaluate
+from nullspaceSR.metrics import LPIPSMetric
 from nullspaceSR.models import IMDN, NuSESR
 from nullspaceSR.pca import BlockNullSpacePCA
 from nullspaceSR.utils import (get_device, model_from_checkpoint, parse_args, restore_rng,
@@ -47,10 +48,13 @@ def main():
     parser.add_argument("--log-every", type=int, default=100)
     parser.add_argument("--checkpoint-every", type=int, default=10)
     parser.add_argument("--shave", type=int, default=0)
+    parser.add_argument("--lpips", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--device", default="auto")
     parser.add_argument("--augment", action=argparse.BooleanOptionalAction, default=True)
     add_wandb_arguments(parser)
     args = parse_args(parser, stage="train")
+    if not isinstance(args.lpips, bool):
+        parser.error("lpips must be true or false")
     if args.null_space is not None and not isinstance(args.null_space, bool):
         parser.error("null_space must be true or false")
     args.null_space = bool(args.basis) if args.null_space is None else args.null_space
@@ -125,6 +129,7 @@ def main():
                     "channels": model.channels, "width": args.width}
     print(f"Training {architecture} on {device}; {len(train_loader)} batches/epoch", flush=True)
     wandb, wandb_run = init_wandb(args, job_type="train")
+    lpips_metric = LPIPSMetric().to(device) if args.lpips else None
     for epoch in range(start_epoch, args.epochs + 1):
         set_dataset_epoch(train_data, epoch)
         train_loader.generator.manual_seed(args.seed + epoch)
@@ -175,6 +180,7 @@ def main():
                     validation_images.append((row["name"], sr.detach().cpu(), hr.detach().cpu()))
 
             summary, rows = evaluate(model, val_loader, device, shave=args.shave,
+                                     lpips_metric=lpips_metric,
                                      on_image=collect_validation_image)
             record["validation"] = summary
             write_json(output / "validation" / f"epoch_{epoch:04d}.json", summary)
@@ -183,13 +189,16 @@ def main():
             if improved:
                 best_psnr = summary["rgb_psnr"]
             print(f"epoch {epoch}: val PSNR={summary['rgb_psnr']:.4f}, "
+                  f"SSIM={summary['rgb_ssim']:.6f}, "
                   f"SR range=[{summary['sr_min']:.4f}, {summary['sr_max']:.4f}], "
                   f"below0={summary['sr_below_zero_fraction']:.1%}, "
                   f"above1={summary['sr_above_one_fraction']:.1%}", flush=True)
+            if "lpips" in summary:
+                print(f"LPIPS={summary['lpips']:.6f}", flush=True)
             if model.uses_null_space:
                 print(f"DC={summary['dc_max_abs']:.3e}", flush=True)
             wandb_metrics.update({f"validation/{key}": summary[key]
-                                  for key in ("rgb_psnr", "rgb_ssim", "rgb_mse", "oracle_psnr",
+                                  for key in ("rgb_psnr", "rgb_ssim", "lpips", "rgb_mse", "oracle_psnr",
                                               "sr_min", "sr_max", "sr_mean",
                                               "sr_below_zero_fraction", "sr_above_one_fraction",
                                               "dc_max_abs", "decomposition_abs") if key in summary})

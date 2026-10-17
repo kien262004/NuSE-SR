@@ -26,7 +26,7 @@ def command_defaults(config, stage, allowed):
         "train": {"output", "resume", "epochs", "batch_size", "lr", "min_lr",
                   "weight_decay", "grad_clip", "val_every", "log_every", "checkpoint_every"},
         "pca": {"output", "batch_size", "repeat", "augment"},
-        "evaluation": {"output", "shave", "save_images"},
+        "evaluation": {"output", "shave", "save_images", "lpips"},
         "runtime": {"seed", "device"},
         "logging": {"enabled", "project", "entity", "name", "mode", "tags"},
     }
@@ -38,7 +38,7 @@ def command_defaults(config, stage, allowed):
     active = ["model", "data", stage, "runtime"]
     if stage == "train":
         defaults.update({k: v for k, v in config.get("evaluation", {}).items()
-                         if k == "shave"})
+                         if k in {"shave", "lpips"} and k in allowed})
     for section in active:
         defaults.update({k: deepcopy(v) for k, v in config.get(section, {}).items()
                          if k in allowed})

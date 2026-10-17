@@ -45,6 +45,7 @@ pca:
   repeat: 4
   augment: false
 evaluation:
+  lpips: true
   output: results/nusesr_x4_k8_validation
   shave: 0
   save_images: false

@@ -55,3 +55,41 @@ def rgb_ssim(predicted: Tensor, target: Tensor, shave: int = 0,
     values = ((2 * mx * my + c1) * (2 * covariance + c2)
               / ((mx.square() + my.square() + c1) * (vx + vy + c2)))
     return values.flatten(1).mean(1)
+
+
+class LPIPSMetric(torch.nn.Module):
+    """Frozen LPIPS v0.1 AlexNet; clipped RGB mapped from [0,1] to [-1,1].
+
+    Uses the same border shave as PSNR/SSIM. Grayscale is replicated to RGB.
+    No resizing: AlexNet requires at least 32 pixels along each cropped side.
+    """
+
+    def __init__(self):
+        super().__init__()
+        try:
+            import lpips
+        except ImportError as error:
+            raise ImportError(
+                'LPIPS requires the metrics extra: pip install -e ".[metrics]" '
+                '(or disable with --no-lpips)'
+            ) from error
+        # Metric construction must not change the training RNG sequence.
+        with torch.random.fork_rng(devices=[]):
+            self.network = lpips.LPIPS(net="alex", version="0.1", verbose=False)
+        self.network.requires_grad_(False)
+        self.eval()
+
+    @torch.no_grad()
+    def forward(self, predicted: Tensor, target: Tensor, shave: int = 0) -> Tensor:
+        predicted, target = _crop_pair(predicted, target, shave)
+        if predicted.shape[1] == 1:
+            predicted = predicted.expand(-1, 3, -1, -1)
+            target = target.expand(-1, 3, -1, -1)
+        elif predicted.shape[1] != 3:
+            raise ValueError("LPIPS requires RGB or grayscale images")
+        if min(predicted.shape[-2:]) < 32:
+            raise ValueError("LPIPS AlexNet requires cropped images at least 32x32; use --no-lpips for tiny fixtures")
+        self.network.eval()
+        values = self.network(predicted.float().clamp(0, 1) * 2 - 1,
+                              target.float().clamp(0, 1) * 2 - 1)
+        return values.flatten(1).mean(1)

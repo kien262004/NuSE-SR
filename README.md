@@ -150,7 +150,7 @@ Decoder tính trước $U_k=QV_k$ và $\mu=Qm$, nên inference chỉ tổng hợ
     ├── engine.py                     # Training epoch trên batch chung
     ├── fit_pca.py                     # Fit PCA và provenance metadata
     ├── evaluation.py                 # Oracle / prediction error decomposition
-    ├── metrics.py                    # RGB MSE, PSNR, SSIM
+    ├── metrics.py                    # RGB MSE, PSNR, SSIM, LPIPS
     ├── utils.py                      # Seed, YAML, checkpoint, JSON/CSV/PNG
     ├── patches.py                    # Block extraction và pixel shuffle
     ├── pca.py                        # Q, PCA fitting và decoder
@@ -270,9 +270,11 @@ Thư mục run chứa `config.json`, `manifest.json`, `history.json` và metric 
 
 ### Metric và đầu ra
 
-Đánh giá xuất `metrics.json` và `per_image.csv`, gồm RGB PSNR/SSIM/MSE, oracle PSNR, truncation MSE, coefficient prediction error, consistency và sai lệch phân rã lỗi. PSNR được lấy trung bình từng ảnh; `global_pixel_mse` được tính theo tổng số pixel. DC và sai lệch phân rã được tổng hợp bằng giá trị lớn nhất.
+Đánh giá xuất `metrics.json` và `per_image.csv`, gồm RGB PSNR/SSIM/MSE và LPIPS. Nhánh PCA còn có oracle PSNR, truncation MSE, coefficient prediction error, consistency và sai lệch phân rã lỗi. Các metric chất lượng được lấy trung bình từng ảnh; `global_pixel_mse` được tính theo tổng số pixel. DC và sai lệch phân rã được tổng hợp bằng giá trị lớn nhất.
 
-Mặc định đo ảnh float RGB nguyên trạng, `shave=0`, không clamp hoặc lượng tử hóa. SSIM dùng Gaussian window 11×11 (sigma 1.5), valid convolution và population covariance; ảnh nhỏ dùng window lẻ phù hợp. Border shave chỉ áp dụng cho metric chất lượng; phân rã lỗi luôn đo trên toàn ảnh.
+PSNR/SSIM đo ảnh float RGB nguyên trạng, mặc định `shave=0`, không clamp hoặc lượng tử hóa. SSIM dùng Gaussian window 11×11 (sigma 1.5), valid convolution và population covariance; ảnh nhỏ dùng window lẻ phù hợp. Border shave chỉ áp dụng cho metric chất lượng; phân rã lỗi luôn đo trên toàn ảnh.
+
+LPIPS mặc định bật trong validation/test, dùng AlexNet pretrained (v0.1), clamp về `[0,1]` rồi chuẩn hóa `[-1,1]`, cùng border shave và không resize. Cài bằng `python -m pip install -e ".[metrics]"`; lần đầu sẽ tải trọng số AlexNet. PSNR/SSIM càng cao càng tốt, LPIPS càng thấp càng tốt. Có thể tắt bằng `--no-lpips` hoặc `evaluation.lpips: false`; ảnh sau shave cần ít nhất 32×32 cho LPIPS. Chi tiết xem [cấu hình](docs/configuration.md).
 
 ```bash
 python test.py --config configs/test_div2k.yaml --save-images

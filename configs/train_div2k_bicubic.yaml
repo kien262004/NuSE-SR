@@ -47,6 +47,7 @@ pca:
   repeat: 4
   augment: false
 evaluation:
+  lpips: true
   output: results/imdn_x4_bicubic_validation
   shave: 0
   save_images: false

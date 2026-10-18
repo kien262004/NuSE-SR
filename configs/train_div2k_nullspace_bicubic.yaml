@@ -1,5 +1,5 @@
-# PCA null-space with bicubic LR: experimental, rejected by the current
-# average-pool measurement consistency check during PCA fitting/train/evaluation.
+# Dataset creates bicubic LR independently of the fixed average-pool PCA model.
+# The model enforces average_pool(SR) == LR, not average_pool(HR) == LR.
 # Shared experiment config: model, data, train, plus PCA/evaluation/runtime.
 model:
   null_space: true

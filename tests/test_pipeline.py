@@ -8,10 +8,82 @@ import unittest
 from pathlib import Path
 
 import torch
+import yaml
 from PIL import Image
 
 
 class PipelineTest(unittest.TestCase):
+    def test_nullspace_bicubic_preset_fit_train_and_evaluate(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            config = yaml.safe_load((Path(__file__).resolve().parents[1] /
+                                     "configs/train_div2k_nullspace_bicubic.yaml").read_text())
+            self.assertIs(config["model"]["null_space"], True)
+            for split in ("train", "val"):
+                (root / split).mkdir()
+                pixels = bytes((i * 13) % 256 for i in range(16 * 20 * 3))
+                Image.frombytes("RGB", (20, 16), pixels).save(root / split / "image.png")
+                config["data"][f"{split}_hr"] = (root / split).as_posix()
+            basis = root / "basis.pt"
+            config["model"].update(scale=2, rank=2, width=4, basis=basis.as_posix())
+            config["data"].update(repeat=1, workers=0)
+            config["data"]["resize"]["size"] = [8, 8]
+            config["train"].update(output=(root / "run").as_posix(), epochs=1, batch_size=1)
+            config["runtime"]["device"] = "cpu"
+            config["logging"]["enabled"] = False
+            config["evaluation"]["lpips"] = False
+            path = root / "nullspace_bicubic.yaml"
+            path.write_text(yaml.safe_dump(config))
+            def run(module, *arguments):
+                result = subprocess.run([sys.executable, "-m", module, "--config", str(path),
+                                         *map(str, arguments)], capture_output=True, text=True, timeout=90,
+                                        env={**os.environ, "OMP_NUM_THREADS": "1", "MKL_NUM_THREADS": "1"})
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            run("nullspaceSR.fit_pca", "--output", basis, "--repeat", 1)
+            run("train")
+            state = torch.load(root / "run" / "last.pt", weights_only=True)
+            self.assertTrue(state["architecture"]["null_space"])
+            self.assertIn("train_coefficient_image_mse", state["history"][0])
+            run("test", "--checkpoint", root / "run" / "last.pt", "--hr-dir", root / "val",
+                "--output", root / "results")
+            summary = json.loads((root / "results" / "metrics.json").read_text())["summary"]
+            self.assertLess(summary["dc_max_abs"], 1e-5)
+            self.assertLess(summary["decomposition_abs"], 1e-6)
+            self.assertGreater(summary["measurement_mismatch_mse"], 1e-6)
+            self.assertAlmostEqual(summary["truncation_mse"], summary["pca_truncation_mse"] +
+                                   summary["measurement_mismatch_mse"], places=6)
+
+    def test_repository_bicubic_preset_disables_measurement_check(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            config = yaml.safe_load((Path(__file__).resolve().parents[1] /
+                                     "configs/train_div2k_bicubic.yaml").read_text())
+            self.assertIs(config["model"]["null_space"], False)
+            self.assertEqual(config["data"]["resize"]["method"], "bicubic")
+            for split in ("train", "val"):
+                (root / split).mkdir()
+                pixels = bytes((i * 13) % 256 for i in range(16 * 20 * 3))
+                Image.frombytes("RGB", (20, 16), pixels).save(root / split / "image.png")
+                config["data"][f"{split}_hr"] = (root / split).as_posix()
+            config["model"].update(scale=2, width=4)
+            # A leftover basis must never enable PCA when null_space is false.
+            config["model"]["basis"] = (root / "missing_basis.pt").as_posix()
+            config["data"].update(repeat=1, workers=0)
+            config["data"]["resize"]["size"] = [8, 8]
+            config["train"].update(output=(root / "run").as_posix(), epochs=1, batch_size=1)
+            config["runtime"]["device"] = "cpu"
+            config["logging"]["enabled"] = False
+            config["evaluation"]["lpips"] = False
+            path = root / "bicubic.yaml"
+            path.write_text(yaml.safe_dump(config))
+            result = subprocess.run([sys.executable, "-m", "train", "--config", str(path)],
+                                    capture_output=True, text=True, timeout=90,
+                                    env={**os.environ, "OMP_NUM_THREADS": "1", "MKL_NUM_THREADS": "1"})
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            state = torch.load(root / "run" / "last.pt", weights_only=True)
+            self.assertFalse(state["architecture"]["null_space"])
+            self.assertIn("train_image_mse", state["history"][0])
+
     def test_image_space_bicubic_training_resume_and_evaluation(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

@@ -107,7 +107,7 @@ custom datasets retain their own constructor options.
 `model.null_space` selects the output domain:
 
 - `true`: predict LR coefficient maps, decode using frozen PCA, and add the
-  repeated LR base. Requires `model.basis` and average-pool pairs. Training uses
+  repeated LR base. Requires `model.basis`. Training uses
   coefficient SSE normalized per HR pixel, as before.
 - `false`: use IMDN's Conv + PixelShuffle image head and train against HR with
   image MSE. No PCA file is loaded; bicubic, bilinear, and custom pairs are allowed.
@@ -127,6 +127,21 @@ and test directly, without fitting PCA. Checkpoints record the selected mode,
 and evaluation automatically restores it without an external basis file.
 Oracle, coefficient, and null-space consistency metrics are reported only in
 PCA mode; both modes report image quality and output-range metrics.
+
+LR generation is independent of the model: `data.resize.method` may be bicubic,
+bilinear, or average pooling in either mode. The PCA model always uses its fixed
+block-average operator A, regardless of that setting. It enforces `A(SR) == LR`;
+training/evaluation do not require `A(HR) == LR`. PCA fitting uses HR only.
+`configs/train_div2k_nullspace_bicubic.yaml` trains the fixed average-pool PCA
+model using bicubic LR inputs.
+
+If `A(HR) != LR`, exact HR reconstruction is outside the model's constraint.
+Coefficient loss still has the same gradient as image MSE because the extra
+error is orthogonal to the decoder's basis. Evaluation reports
+`measurement_mismatch_mse = MSE(A(HR), LR)` and `pca_truncation_mse` separately.
+The legacy `truncation_mse` field is the full oracle residual, including both;
+`full_image_mse = truncation_mse + coefficient_image_mse` remains valid.
+`dc_max_abs` measures `A(SR) - LR`, using the fixed model operator.
 
 ```bash
 python fit_pca.py --config configs/train_div2k.yaml

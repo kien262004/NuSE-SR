@@ -76,8 +76,8 @@ def collate_sr(samples: Sequence[Mapping]):
 def supervised_batch(batch, device, *, channels=None, scale=None, operator=None):
     """Validate model compatibility, transfer tensors, return (input,target).
 
-    Dataset contract is general. NuSESR additionally needs matching channels,
-    scale, normalization and measurement operator; mismatch fails explicitly.
+    Channels/scale are model compatibility checks. Measurement consistency is
+    opt-in via operator; LR degradation can be independent of the model operator.
     """
     lr, hr = batch["input"], batch.get("target")
     if hr is None:
@@ -94,7 +94,11 @@ def supervised_batch(batch, device, *, channels=None, scale=None, operator=None)
     if not torch.isfinite(lr).all() or not torch.isfinite(hr).all():
         raise ValueError("Input/target contains non-finite values")
     if operator is not None and not torch.allclose(operator(hr), lr, atol=1e-5, rtol=1e-5):
-        raise ValueError("Dataset input is not A(target); use matching degradation/normalization")
+        raise ValueError(
+            f"Dataset input is not A(target) for {type(operator).__name__}; "
+            "explicit measurement validation requires matching degradation/normalization. "
+            "Omit operator when LR generation is independent of the model operator."
+        )
     return lr, hr
 
 

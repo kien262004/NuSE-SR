@@ -19,7 +19,7 @@ def evaluate(model, loader, device, *, shave=0, image_dir=None, on_image=None,
     try:
         for batch in loader:
             lr, hr = supervised_batch(batch, device, channels=model.channels,
-                                      scale=model.scale, operator=model.operator)
+                                      scale=model.scale)
             if hr.shape[0] != 1:
                 raise ValueError("Evaluation requires batch size one")
             if model.uses_null_space:
@@ -49,10 +49,14 @@ def evaluate(model, loader, device, *, shave=0, image_dir=None, on_image=None,
                 oracle_coeffs = model.decoder.encode_hr(hr)
                 oracle = model.operator.pseudoinverse(lr) + model.decoder(oracle_coeffs)
                 truncation = rgb_mse(oracle, hr).item()
+                hr_measurement = model.operator(hr)
+                matched_oracle = model.operator.pseudoinverse(hr_measurement) + model.decoder(oracle_coeffs)
                 prediction = coefficient_image_mse(predicted.double(), oracle_coeffs.double(),
                                                    channels=model.channels, scale=model.scale).item()
                 row.update({"oracle_psnr": rgb_psnr(oracle, hr, shave).item(),
                             "truncation_mse": truncation,
+                            "pca_truncation_mse": rgb_mse(matched_oracle, hr).item(),
+                            "measurement_mismatch_mse": rgb_mse(hr_measurement, lr).item(),
                             "coefficient_image_mse": prediction,
                             "coefficient_mse": (predicted.double() - oracle_coeffs.double()).square().mean().item(),
                             "dc_max_abs": (model.operator(sr) - lr).abs().max().item(),

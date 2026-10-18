@@ -12,7 +12,7 @@ def train_one_epoch(model, loader, optimizer, device, *, grad_clip=1.0,
     for step, batch in enumerate(loader, 1):
         hr_channels, scale = model.channels, model.scale
         lr, hr = supervised_batch(batch, device, channels=hr_channels,
-                                  scale=scale, operator=model.operator)
+                                  scale=scale)
         if model.uses_null_space:
             with torch.no_grad():
                 target = model.decoder.encode_hr(hr)

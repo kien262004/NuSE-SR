@@ -201,6 +201,7 @@ def main():
                                   for key in ("rgb_psnr", "rgb_ssim", "lpips", "rgb_mse", "oracle_psnr",
                                               "sr_min", "sr_max", "sr_mean",
                                               "sr_below_zero_fraction", "sr_above_one_fraction",
+                                              "pca_truncation_mse", "measurement_mismatch_mse",
                                               "dc_max_abs", "decomposition_abs") if key in summary})
             for index, (name, sr, hr) in enumerate(validation_images, 1):
                 wandb_metrics[f"validation/image_{index:02d}_sr"] = wandb_rgb_image(

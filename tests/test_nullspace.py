@@ -48,6 +48,26 @@ class NullSpaceTests(unittest.TestCase):
             torch.testing.assert_close(Q.T @ Q, torch.eye(scale**2 - 1, dtype=Q.dtype))
             torch.testing.assert_close(Q.sum(0), torch.zeros(scale**2 - 1, dtype=Q.dtype), atol=1e-14, rtol=0)
 
+    def test_bicubic_input_with_fixed_average_pool_model(self):
+        hr = torch.rand(2, 3, 16, 20)
+        lr = torch.nn.functional.interpolate(hr, scale_factor=0.5, mode="bicubic",
+                                              align_corners=False, antialias=True)
+        decoder = BlockNullSpacePCA.fit([hr], scale=2, rank=2)
+        model = NuSESR(IMDN(3, 2, width=4), decoder)
+        self.assertFalse(torch.allclose(model.operator(hr), lr, atol=1e-5, rtol=1e-5))
+        predicted = model.predict_coefficients(lr)
+        target = decoder.encode_hr(hr)
+        sr = model.operator.pseudoinverse(lr) + decoder(predicted)
+        oracle = model.operator.pseudoinverse(lr) + decoder(target)
+        loss = coefficient_image_mse(predicted, target, channels=3, scale=2)
+        full_loss = (sr - hr).square().mean()
+        torch.testing.assert_close(full_loss, (oracle - hr).square().mean() + loss)
+        # The model constraint remains about its output, regardless of LR source.
+        torch.testing.assert_close(model.operator(sr), lr, atol=1e-6, rtol=1e-6)
+        coeff_gradient, = torch.autograd.grad(loss, predicted, retain_graph=True)
+        image_gradient, = torch.autograd.grad(full_loss, predicted)
+        torch.testing.assert_close(coeff_gradient, image_gradient, atol=1e-7, rtol=1e-5)
+
     def test_low_rank_decomposition_and_gradient(self):
         for scale, rank in ((2, 2), (4, 8)):
             with self.subTest(scale=scale):

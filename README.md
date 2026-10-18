@@ -2,13 +2,17 @@
 
 Null space là plugin tùy chọn qua `model.null_space` trong YAML:
 
-- `true`: head hệ số PCA + decoder cố định, cần `model.basis` và LR average pooling.
+- `true`: head hệ số PCA + decoder average pooling cố định, cần `model.basis`.
 - `false`: head Conv + PixelShuffle của IMDN, học trực tiếp ảnh HR bằng image MSE,
   không cần fit PCA. Có thể dùng LR bicubic với `configs/train_div2k_bicubic.yaml`.
 
 Nếu bỏ `null_space`, có `basis` thì dùng PCA (tương thích config cũ), không có
 `basis` thì dùng miền ảnh. Train, resume và test đều hỗ trợ hai chế độ;
 checkpoint lưu chế độ model. Xem [cấu hình chi tiết](docs/configuration.md).
+
+Dataset tạo LR độc lập theo `data.resize.method`. Có thể dùng LR bicubic với
+model PCA average pooling qua `configs/train_div2k_nullspace_bicubic.yaml`.
+Model luôn bảo đảm `average_pool(SR) == LR`; không yêu cầu `average_pool(HR) == LR`.
 
 **Siêu phân giải ảnh bằng cách dự đoán hệ số PCA và tổng hợp trực tiếp trong null space.**
 
@@ -369,7 +373,7 @@ Predictor có thể khai thác ngữ cảnh giữa các block. Ràng buộc null
 
 ## Phạm vi và giới hạn
 
-- Consistency được thiết kế cho average pooling theo block không chồng lấn. Bicubic, blur hoặc degradation khác cần toán tử và cơ sở null space tương ứng.
+- Model PCA cố định dùng average pooling theo block không chồng lấn, độc lập cách sinh LR. Với LR bicubic, `average_pool(SR) == LR` vẫn đúng; sai lệch `average_pool(HR) - LR` tạo phần lỗi không thể loại bỏ trong ràng buộc này và được báo cáo bằng `measurement_mismatch_mse`.
 - Kích thước HR phải chia hết cho scale; dữ liệu thường dùng float trong `[0,1]`.
 - Không dùng HR validation/test để fit mean hoặc basis. Validation có thể chọn hyperparameter; test dành cho đánh giá cuối.
 - Augment HR trước rồi tạo LR và encode hệ số, vì flip/rotate còn thay đổi thứ tự pixel bên trong block.

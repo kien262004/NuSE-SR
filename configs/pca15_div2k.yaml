@@ -1,0 +1,23 @@
+# Fit PCA-15 on the same DIV2K training images as the original PCA-8 config.
+model:
+  scale: 4
+  rank: 15
+data:
+  train_dataset: div2k
+  train_hr: /home/admin_mcn/scdc_data/data_bundle/phase1_seven_extra/div2k_train/DIV2K_train_HR
+  resize:
+    method: average_pool
+    size: [64, 64]
+    antialias: true
+  crop_size: 256
+  repeat: 20
+  augment: true
+  workers: 0
+pca:
+  output: basis/avgpool_x4_rank15.pt
+  batch_size: 8
+  repeat: 4
+  augment: false
+runtime:
+  device: auto
+  seed: 2026

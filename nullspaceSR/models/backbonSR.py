@@ -1,13 +1,13 @@
 from torch import Tensor, nn
 
 from ..operators import AveragePoolSR
-from ..pca import BlockNullSpacePCA
+from ..pca import BlockNullSpacePCA, PCAMixingBasis
 
 
 class NuSESR(nn.Module):
     """SR predictor with an optional fixed PCA null-space decoder plugin."""
 
-    def __init__(self, predictor: nn.Module, decoder: BlockNullSpacePCA | None = None) -> None:
+    def __init__(self, predictor: nn.Module, decoder: BlockNullSpacePCA | PCAMixingBasis | None = None) -> None:
         super().__init__()
         self.predictor = predictor
         self.decoder = decoder
@@ -21,7 +21,8 @@ class NuSESR(nn.Module):
 
     @property
     def loss_name(self) -> str:
-        return "train_coefficient_image_mse" if self.uses_null_space else "train_image_mse"
+        return ("train_coefficient_image_mse" if self.uses_null_space and
+                not getattr(self.decoder, "is_learnable", False) else "train_image_mse")
 
     def predict_coefficients(self, lr: Tensor) -> Tensor:
         if not self.uses_null_space:

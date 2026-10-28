@@ -21,6 +21,22 @@ def block_null_basis(scale: int, *, dtype=torch.float64) -> Tensor:
     return basis
 
 
+def orthonormal_columns(matrix: Tensor) -> Tensor:
+    """Reduced QR with stable column signs and an explicit rank check."""
+    if matrix.ndim < 2 or matrix.shape[-2] < matrix.shape[-1]:
+        raise ValueError("Expected a tall matrix")
+    if not torch.isfinite(matrix).all():
+        raise FloatingPointError("Mixing parameters are non-finite")
+    singular = torch.linalg.svdvals(matrix.detach())
+    if (singular[..., -1] < 1e-6).any() or (
+        singular[..., -1] / singular[..., 0].clamp_min(1e-30) < 1e-6
+    ).any():
+        raise FloatingPointError("Mixing parameters are rank deficient")
+    q, r = torch.linalg.qr(matrix, mode="reduced")
+    signs = torch.where(torch.diagonal(r, dim1=-2, dim2=-1) < 0, -1, 1)
+    return q * signs.unsqueeze(-2)
+
+
 class BlockNullSpacePCA(nn.Module):
     """Per-channel frozen PCA shared by spatial blocks.
 
@@ -142,3 +158,81 @@ class BlockNullSpacePCA(nn.Module):
                      eigenvalues if eigenvalues.numel() else None)
         result.load_state_dict(state)
         return result
+
+
+class PCAMixingBasis(nn.Module):
+    """Learn an orthonormal rank-k basis inside a fixed PCA source span."""
+
+    is_learnable = True
+    basis_mode = "pca_mixing"
+
+    def __init__(self, scale: int, mean: Tensor, source_components: Tensor, *,
+                 rank: int = 8, eigenvalues: Tensor | None = None) -> None:
+        super().__init__()
+        if mean.ndim != 2 or source_components.ndim != 3 or source_components.shape[:2] != mean.shape:
+            raise ValueError("mean/source_components shapes are incompatible")
+        d = scale**2 - 1
+        source_rank = source_components.shape[-1]
+        if mean.shape[-1] != d or not 1 <= rank <= source_rank <= d:
+            raise ValueError("Expected 1 <= rank <= source_rank <= scale**2-1")
+        if mean.dtype != source_components.dtype or mean.device != source_components.device:
+            raise ValueError("mean/source_components dtype and device must match")
+        if not torch.isfinite(mean).all() or not torch.isfinite(source_components).all():
+            raise ValueError("PCA buffers must be finite")
+        gram = source_components.transpose(-1, -2) @ source_components
+        identity = torch.eye(source_rank, dtype=gram.dtype, device=gram.device)
+        if not torch.allclose(gram, identity.expand_as(gram), atol=1e-5, rtol=1e-5):
+            raise ValueError("source_components must be orthonormal")
+        if eigenvalues is None:
+            eigenvalues = mean.new_empty((mean.shape[0], 0))
+        elif eigenvalues.shape != mean.shape or not torch.isfinite(eigenvalues).all():
+            raise ValueError("eigenvalues must have shape (channels, scale**2-1) and be finite")
+        self.scale, self.channels, self.rank = scale, mean.shape[0], rank
+        self.source_rank = source_rank
+        self.register_buffer("Q", block_null_basis(scale, dtype=mean.dtype).to(mean.device))
+        self.register_buffer("mean", mean.detach().clone())
+        self.register_buffer("source_components", source_components.detach().clone())
+        self.register_buffer("eigenvalues", eigenvalues.detach().clone())
+        self.register_buffer("block_mean", torch.einsum("pd,cd->cp", self.Q, self.mean))
+        raw = mean.new_zeros((self.channels, rank, source_rank))
+        raw[:, :, :rank] = torch.eye(rank, dtype=mean.dtype, device=mean.device)
+        self.raw_mixing = nn.Parameter(raw)
+        self.register_buffer("initial_basis", torch.einsum(
+            "pd,cdk->cpk", self.Q, source_components[..., :rank]).detach().clone())
+
+    @classmethod
+    def from_pca(cls, decoder: BlockNullSpacePCA, *, rank: int,
+                 source_rank: int = 15) -> "PCAMixingBasis":
+        if source_rank > decoder.rank:
+            raise ValueError("PCA artifact does not contain requested source rank")
+        return cls(decoder.scale, decoder.mean, decoder.components[..., :source_rank],
+                   rank=rank, eigenvalues=decoder.eigenvalues if decoder.eigenvalues.numel() else None)
+
+    def effective_components(self) -> Tensor:
+        mixing = orthonormal_columns(self.raw_mixing.transpose(-1, -2))
+        return torch.einsum("cdm,cmk->cdk", self.source_components, mixing)
+
+    def effective_basis(self) -> Tensor:
+        return torch.einsum("pd,cdk->cpk", self.Q, self.effective_components())
+
+    @property
+    def basis(self) -> Tensor:
+        return self.effective_basis()
+
+    def encode_hr(self, hr: Tensor) -> Tensor:
+        blocks = to_blocks(hr, self.scale)
+        if blocks.shape[1] != self.channels:
+            raise ValueError("HR channels do not match decoder")
+        centered = blocks - self.block_mean[None, :, :, None, None]
+        return torch.einsum("bcphw,cpk->bckhw", centered, self.effective_basis()).flatten(1, 2)
+
+    def decode_null(self, coeffs: Tensor) -> Tensor:
+        if coeffs.ndim != 4 or coeffs.shape[1] != self.channels * self.rank:
+            raise ValueError(f"Expected {self.channels * self.rank} coefficient channels")
+        b, _, h, w = coeffs.shape
+        coeffs = coeffs.reshape(b, self.channels, self.rank, h, w)
+        blocks = torch.einsum("bckhw,cpk->bcphw", coeffs, self.effective_basis())
+        return from_blocks(blocks + self.block_mean[None, :, :, None, None], self.scale)
+
+    def forward(self, coeffs: Tensor) -> Tensor:
+        return self.decode_null(coeffs)

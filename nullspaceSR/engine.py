@@ -13,7 +13,7 @@ def train_one_epoch(model, loader, optimizer, device, *, grad_clip=1.0,
         hr_channels, scale = model.channels, model.scale
         lr, hr = supervised_batch(batch, device, channels=hr_channels,
                                   scale=scale)
-        if model.uses_null_space:
+        if model.uses_null_space and not getattr(model.decoder, "is_learnable", False):
             with torch.no_grad():
                 target = model.decoder.encode_hr(hr)
             predicted = model.predict_coefficients(lr)
@@ -25,7 +25,9 @@ def train_one_epoch(model, loader, optimizer, device, *, grad_clip=1.0,
         optimizer.zero_grad(set_to_none=True)
         loss.backward()
         if grad_clip:
-            torch.nn.utils.clip_grad_norm_(model.predictor.parameters(), grad_clip, error_if_nonfinite=True)
+            torch.nn.utils.clip_grad_norm_(
+                model.parameters() if model.uses_null_space and getattr(model.decoder, "is_learnable", False)
+                else model.predictor.parameters(), grad_clip, error_if_nonfinite=True)
         optimizer.step()
         weighted_loss += loss.item() * hr.numel()
         pixels += hr.numel()

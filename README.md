@@ -3,12 +3,18 @@
 Null space là plugin tùy chọn qua `model.null_space` trong YAML:
 
 - `true`: head hệ số PCA + decoder average pooling cố định, cần `model.basis`.
-- `false`: head Conv + PixelShuffle của IMDN, học trực tiếp ảnh HR bằng image MSE,
+- `false`: head Conv + PixelShuffle, học trực tiếp ảnh HR bằng image MSE,
   không cần fit PCA. Có thể dùng LR bicubic với `configs/train_div2k_bicubic.yaml`.
 
 Nếu bỏ `null_space`, có `basis` thì dùng PCA (tương thích config cũ), không có
 `basis` thì dùng miền ảnh. Train, resume và test đều hỗ trợ hai chế độ;
 checkpoint lưu chế độ model. Xem [cấu hình chi tiết](docs/configuration.md).
+
+Backbone mặc định hiện là **NuSE-E** (`backbone: nuse`, width 32, 7 residual
+block), chuyển từ `plan/nuse-e-v3.ipynb`. Nhánh PCA dùng các stage và head theo
+nhóm hệ số; nhánh ảnh dùng Conv + PixelShuffle. Hỗ trợ block `plain`, `rep`,
+`lk7`. Checkpoint IMDN cũ vẫn nạp được; resume bằng cấu hình cũ và
+`--backbone imdn`. Config mới dùng thư mục output `runs/nuse_e_*` riêng.
 
 Dataset tạo LR độc lập theo `data.resize.method`. Có thể dùng LR bicubic với
 model PCA average pooling qua `configs/train_div2k_nullspace_bicubic.yaml`.
@@ -33,7 +39,8 @@ Mạng dự đoán `C × k` bản đồ hệ số ở độ phân giải LR. Dec
 | Thành phần | Vai trò |
 |---|---|
 | `NuSESR` | Ghép predictor, PCA decoder và thành phần `A†y` |
-| `IMDN` | Predictor coefficient miền LR, dựa trên sáu IMDB của kiến trúc IMDN |
+| `NuSEBackbone` | Stem 3×3, residual stages, head nhóm hệ số PCA hoặc head ảnh |
+| `IMDN` | Backbone cũ, giữ để nạp checkpoint và chạy so sánh |
 | `BlockNullSpacePCA` | Fit PCA offline, encode nhãn, decode chi tiết, lưu/nạp basis |
 | `AveragePoolSR` | Toán tử đo average pooling và giả nghịch đảo lặp pixel |
 | `coefficient_image_mse` | Loss hệ số chuẩn hóa theo số pixel HR |
@@ -292,7 +299,7 @@ Ví dụ tối thiểu với dữ liệu synthetic:
 
 ```python
 import torch
-from nullspaceSR import BlockNullSpacePCA, NuSESR, IMDN
+from nullspaceSR import BlockNullSpacePCA, NuSESR, NuSEBackbone
 
 scale, rank, channels = 4, 8, 3
 train_hr_batches = [torch.rand(2, channels, 32, 32) for _ in range(3)]
@@ -301,7 +308,8 @@ train_hr_batches = [torch.rand(2, channels, 32, 32) for _ in range(3)]
 pca = BlockNullSpacePCA.fit(train_hr_batches, scale=scale, rank=rank)
 pca.save("basis.pt")
 
-predictor = IMDN(channels=channels, rank=rank, width=64)
+predictor = NuSEBackbone(channels=channels, rank=rank, width=32,
+                         scale=scale, eigenvalues=pca.eigenvalues)
 model = NuSESR(predictor, pca)
 
 hr = torch.rand(1, channels, 32, 48)
@@ -350,10 +358,17 @@ Nếu dùng coefficient MSE thông thường, hệ số quy đổi sang đóng g
 
 ## Thay backbone
 
+Mặc định dùng `NuSEBackbone`: stem 3×3, các stage residual, head 1×1 theo nhóm
+hệ số và scale theo căn eigenvalue PCA. Các nhóm/số block có thể suy ra từ
+phổ PCA hoặc cấu hình bằng `budgets` / `stage_blocks`. Đây là phần backbone
+NuSE-E trong notebook; file PCA hiện có chưa chứa Wiener/R² nên không có nhánh
+Wiener, và training vẫn dùng loss hệ số ở rank cấu hình. Xem
+[các lựa chọn backbone](docs/configuration.md) để dùng `rep` hoặc `lk7`.
+
 Lớp `IMDN` giữ stem, sáu Information Multi-Distillation Blocks (IMDB), contrast-aware channel attention, feature fusion và LR residual của IMDN gốc. Chỉ output head được thay: xuất `C*k` kênh hệ số ở cùng độ phân giải LR, không pixel-shuffle thành RGB ([IMDN source](https://github.com/Zheng222/IMDN/blob/master/model/architecture.py)).
 
 
-Bạn có thể thay `IMDN` bằng mạng của mình. Predictor cần tuân theo giao diện:
+Bạn có thể thay predictor bằng mạng của mình. Ở chế độ PCA, predictor cần tuân theo giao diện:
 
 ```text
 Input:  [B, C, H_LR, W_LR]

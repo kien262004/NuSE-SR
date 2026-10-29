@@ -1,4 +1,4 @@
-"""Train IMDN in image space or with the optional fixed PCA null-space plugin."""
+"""Train the NuSE-E backbone with optional fixed average-pool PCA synthesis."""
 import argparse
 import os
 from pathlib import Path
@@ -12,7 +12,7 @@ from nullspaceSR.data import (build_dataset, make_loader, add_dataset_arguments,
 from nullspaceSR.engine import train_one_epoch
 from nullspaceSR.evaluation import evaluate
 from nullspaceSR.metrics import LPIPSMetric
-from nullspaceSR.models import IMDN, NuSESR
+from nullspaceSR.models import NuSESR, build_predictor
 from nullspaceSR.pca import BlockNullSpacePCA
 from nullspaceSR.utils import (get_device, model_from_checkpoint, parse_args, restore_rng,
                     rng_state, save_checkpoint, seed_everything, sha256, write_csv, write_json)
@@ -29,11 +29,16 @@ def main():
     parser.add_argument("--channels", type=int, default=3)
     add_dataset_arguments(parser, "train")
     add_dataset_arguments(parser, "val")
-    parser.add_argument("--output", default="runs/nusesr_x4_k8")
+    parser.add_argument("--output", default="runs/nuse_e_x4_k8")
     parser.add_argument("--resume", help="Resume an epoch-boundary last.pt checkpoint")
     parser.add_argument("--scale", type=int, default=4)
     parser.add_argument("--rank", type=int, default=8)
-    parser.add_argument("--width", type=int, default=64)
+    parser.add_argument("--backbone", choices=("nuse", "imdn"), default="nuse")
+    parser.add_argument("--width", type=int, default=32)
+    parser.add_argument("--num-blocks", type=int, default=7)
+    parser.add_argument("--block", choices=("plain", "rep", "lk7"), default="plain")
+    parser.add_argument("--budgets", type=int, nargs="+", help="PCA coefficient prefixes, ending at rank")
+    parser.add_argument("--stage-blocks", type=int, nargs="+", help="Residual blocks per coefficient stage")
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--crop-size", type=int, default=256)
@@ -82,15 +87,33 @@ def main():
         decoder = BlockNullSpacePCA.load(args.basis)
         if (decoder.scale, decoder.rank) != (args.scale, args.rank):
             raise ValueError("Basis scale/rank do not match training configuration")
-        model = NuSESR(IMDN(decoder.channels, args.rank, args.width), decoder)
         basis_hash = sha256(args.basis)
     else:
-        model = NuSESR(IMDN(args.channels, width=args.width, scale=args.scale))
+        decoder = None
         basis_hash = None
+    predictor = build_predictor(args.backbone, decoder.channels if decoder is not None else args.channels,
+                                args.rank if args.null_space else None, args.width, scale=args.scale,
+                                num_blocks=args.num_blocks, block=args.block, budgets=args.budgets,
+                                stage_blocks=args.stage_blocks, decoder=decoder)
+    model = NuSESR(predictor, decoder)
+    architecture = {"name": "NuSESR" if args.null_space else ("NuSE-E" if args.backbone == "nuse" else "IMDN"),
+                    "backbone": args.backbone, "null_space": args.null_space, "scale": args.scale,
+                    "rank": args.rank if args.null_space else None,
+                    "channels": model.channels, "width": args.width}
+    if args.backbone == "nuse":
+        architecture.update(num_blocks=predictor.num_blocks, block=predictor.block,
+                            budgets=predictor.budgets,
+                            stage_blocks=predictor.stage_blocks if args.null_space else None)
     checkpoint = None
     start_epoch, best_psnr, history = 1, float("-inf"), []
     if args.resume:
         checkpoint = torch.load(args.resume, map_location="cpu", weights_only=True)
+        if checkpoint["architecture"].get("backbone", "imdn") != args.backbone:
+            raise ValueError("Resume backbone differs from checkpoint; old IMDN runs require --backbone imdn")
+        if args.backbone == "nuse":
+            for key in ("num_blocks", "block", "budgets", "stage_blocks"):
+                if checkpoint["architecture"][key] != architecture[key]:
+                    raise ValueError(f"Resume architecture changed: {key}")
         if checkpoint["architecture"].get("null_space", True) != args.null_space:
             raise ValueError("Resume null_space mode differs from the checkpoint")
         if checkpoint["architecture"]["channels"] != model.channels:
@@ -123,10 +146,6 @@ def main():
                              pin_memory=device.type == "cuda")
     write_json(output / "config.json", vars(args))
     write_json(output / "manifest.json", manifest)
-    architecture = {"name": "NuSESR" if args.null_space else "IMDN",
-                    "null_space": args.null_space, "scale": args.scale,
-                    "rank": args.rank if args.null_space else None,
-                    "channels": model.channels, "width": args.width}
     print(f"Training {architecture} on {device}; {len(train_loader)} batches/epoch", flush=True)
     wandb, wandb_run = init_wandb(args, job_type="train")
     lpips_metric = LPIPSMetric().to(device) if args.lpips else None

@@ -109,11 +109,11 @@ custom datasets retain their own constructor options.
 - `true`: predict LR coefficient maps, decode using frozen PCA, and add the
   repeated LR base. Requires `model.basis`. Training uses
   coefficient SSE normalized per HR pixel, as before.
-- `false`: use IMDN's Conv + PixelShuffle image head and train against HR with
+- `false`: use the selected backbone's Conv + PixelShuffle image head and train against HR with
   image MSE. No PCA file is loaded; bicubic, bilinear, and custom pairs are allowed.
 
 When omitted, supplying `model.basis` enables PCA for compatibility with older
-configs; otherwise image-space IMDN is used. `--null-space` / `--no-null-space`
+configs; otherwise image-space prediction is used. `--null-space` / `--no-null-space`
 override YAML. `model.channels` defaults to 3 in image mode; PCA mode derives
 channels from the basis. `rank` is only used in PCA mode.
 
@@ -121,6 +121,55 @@ channels from the basis. `rank` is only used in PCA mode.
 `IMDN(channels=3, rank=8)` retains the LR coefficient head.
 `NuSESR(predictor, decoder=None)` wraps image-space prediction; passing a
 `BlockNullSpacePCA` decoder installs the null-space plugin.
+
+The default backbone is now **NuSE-E**, with a 3x3 RGB stem, 7 residual blocks,
+and width 32. Select it through `model.backbone: nuse` (or `--backbone nuse`).
+The existing IMDN implementation remains available with `backbone: imdn`.
+
+```yaml
+model:
+  backbone: nuse
+  width: 32
+  num_blocks: 7
+  block: plain  # plain, rep, lk7
+  null_space: true
+  scale: 4
+  rank: 8
+  basis: basis/avgpool_x4_rank8.pt
+  # Optional explicit coefficient stages:
+  budgets: [2, 5, 8]
+  stage_blocks: [3, 2, 2]
+```
+
+In coefficient mode, each stage predicts a new coefficient group through a
+zero-initialized 1x1 head scaled by the square roots of PCA eigenvalues.
+Outputs are concatenated within each color channel to match the fixed decoder.
+If `budgets` is omitted, spectral energy targets 50/80/90/100% determine the
+prefixes within the retained rank; repeated eigenvalues are kept together.
+Blocks are allocated by group energy, with at least one per stage. Without
+eigenvalues (or with a zero spectrum), the predictor uses one stage. Explicit
+`stage_blocks` must sum to `num_blocks`, and the last budget must equal `rank`.
+
+This integrates the notebook's residual trunk and grouped coefficient readout.
+Existing basis files do not contain Wiener/R² statistics, so this version has
+no Wiener branch: block allocation uses spectral energy, equivalent to setting
+linear R² to zero. The existing full-rank coefficient training loss remains;
+notebook multi-budget loss and its bicubic pseudo-inverse are not introduced.
+`NuSEBackbone(...)(lr, k=...)` supports coefficient prefixes; the current NuSESR
+wrapper and evaluation use the configured full rank.
+
+In image mode, all residual blocks feed a Conv + PixelShuffle head; omit
+`budgets` and `stage_blocks`. `rep` blocks train with 3x3 + 1x1 + identity
+branches. Use `copy.deepcopy(predictor).eval().fuse()` for inference conversion;
+save normal unfused training checkpoints for resume. `lk7` adds a depthwise
+7x7 convolution between the two 3x3 convolutions in each block.
+
+New checkpoints record the backbone, resolved budgets and stage depths. Old
+checkpoints without a backbone field are restored as IMDN. To resume an old
+run, retain its original configuration and pass `--backbone imdn`; widths must
+also match the checkpoint. NuSE-E runs require a fresh output folder. The
+updated presets use distinct `runs/nuse_e_*` paths, while retaining existing
+PCA basis paths; fitting PCA again is unnecessary when scale/rank match.
 
 `configs/train_div2k_bicubic.yaml` is a complete image-space preset. Run train
 and test directly, without fitting PCA. Checkpoints record the selected mode,

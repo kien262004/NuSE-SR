@@ -11,8 +11,10 @@ pca:
   accumulation_dtype: float64
   frozen: true
 predictor:
-  name: IMDN
-  width: 64
+  name: NuSEBackbone
+  num_blocks: 7
+  block: plain
+  width: 32
   output_channels: 24  # channels * rank
 loss: coefficient_sse_per_hr_pixel
 consistency: structural

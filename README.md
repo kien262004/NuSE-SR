@@ -1,5 +1,10 @@
 # NuSESR
 
+Chạy nghiên cứu kiến trúc trên server: [hướng dẫn](docs/architecture_research.md),
+config `configs/research_architecture.yaml`, lệnh
+`bash scripts/research.sh --stage all`. Pipeline gồm PCA rank 15, oracle theo K,
+ridge theo context, tiny CNN và báo cáo; sweep backbone là bước tùy chọn riêng.
+
 Null space là plugin tùy chọn qua `model.null_space` trong YAML:
 
 - `true`: head hệ số PCA + decoder average pooling cố định, cần `model.basis`.

@@ -1,0 +1,52 @@
+# Phase A/P0-P1: one shared full-rank PCA basis, oracle, ridge and CNN probes.
+# --stage all excludes the expensive optional backbone sweep.
+output: runs/architecture_research
+data:
+  train_hr: /home/admin_mcn/scdc_data/data_bundle/phase1_seven_extra/div2k_train/DIV2K_train_HR
+  val_hr: /home/admin_mcn/scdc_data/data_bundle/phase1_seven_extra/div2k_valid/DIV2K_valid_HR
+  scale: 4
+  methods: [average_pool, bicubic]
+  crop_size: 256
+  repeat: 4
+  batch_size: 8
+  workers: 4
+pca:
+  basis: null  # null: fit TRAIN HR once; external basis must be RGB rank 15 for x4
+  repeat: 4
+analysis:
+  ranks: [1, 2, 4, 8, 12, 15]
+  contexts: [1, 3, 5, 9, 13]
+  channel_modes: [same_channel, rgb]
+  train_samples_per_crop: 512
+  val_samples_per_image: 4096
+  ridge_alpha: 0.0001  # objective: mean SSE + alpha*||weights||², intercept unpenalized
+cnn:
+  enabled: true
+  contexts: [1, 3, 5, 9, 13]
+  width: 16
+  epochs: 20
+  seeds: [2026]  # use [2026, 2027, 2028] for shortlisted experiments
+  lr: 0.001
+  min_lr: 0.000001
+  grad_clip: 1.0
+evaluation:
+  lpips: false  # optional: install .[metrics]; requires cropped images >=32x32
+  shave: 0
+  max_val_images: null  # full validation split
+runtime:
+  device: auto
+  seed: 2026
+  max_train_batches: null
+benchmark:
+  lr_size: [256, 256]
+  warmup: 10
+  iterations: 50
+sweep:
+  ranks: [4, 8, 15]
+  seeds: [2026, 2027, 2028]
+  epochs: 100
+  variants:
+    - {name: nuse_w16_n2, backbone: nuse, width: 16, num_blocks: 2, block: plain}
+    - {name: nuse_w32_n7, backbone: nuse, width: 32, num_blocks: 7, block: plain}
+    - {name: nuse_rep_w32_n7, backbone: nuse, width: 32, num_blocks: 7, block: rep}
+    - {name: imdn_w64, backbone: imdn, width: 64}

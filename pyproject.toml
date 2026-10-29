@@ -11,6 +11,7 @@ requires-python = ">=3.10"
 dependencies = ["torch>=2.1", "numpy>=1.24", "Pillow>=9.1", "PyYAML>=6.0"]
 
 [project.optional-dependencies]
+research = ["matplotlib>=3.7"]
 metrics = ["lpips>=0.1.4"]
 wandb = ["wandb>=0.17"]
 
@@ -18,6 +19,7 @@ wandb = ["wandb>=0.17"]
 nusesr-fit-pca = "nullspaceSR.fit_pca:main"
 nusesr-train = "train:main"
 nusesr-test = "test:main"
+nusesr-research = "nullspaceSR.analysis.research:main"
 
 [tool.setuptools]
 py-modules = ["train", "test"]

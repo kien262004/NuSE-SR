@@ -1,5 +1,8 @@
 # NuSESR
 
+Thí nghiệm backbone local/global: `bash scripts/ablation.sh --config configs/ablation_study.yaml`.
+Xem [hướng dẫn ablation](docs/ablation_study.md) để chuẩn bị basis, chạy trên server và đọc kết quả.
+
 Chạy nghiên cứu kiến trúc trên server: [hướng dẫn](docs/architecture_research.md),
 config `configs/research_architecture.yaml`, lệnh
 `bash scripts/research.sh --stage all`. Pipeline gồm PCA rank 15, oracle theo K,

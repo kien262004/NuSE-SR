@@ -20,6 +20,7 @@ nusesr-fit-pca = "nullspaceSR.fit_pca:main"
 nusesr-train = "train:main"
 nusesr-test = "test:main"
 nusesr-research = "nullspaceSR.analysis.research:main"
+nusesr-ablation = "nullspaceSR.ablation.run:main"
 
 [tool.setuptools]
 py-modules = ["train", "test"]

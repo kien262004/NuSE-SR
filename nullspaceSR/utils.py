@@ -142,6 +142,12 @@ def model_from_checkpoint(checkpoint):
     arch = checkpoint["architecture"]
     state = checkpoint["model"]
     def predictor(decoder=None):
+        if arch.get("backbone") == "ablation":
+            from .models.ablation import AblationBackbone
+            if decoder is None:
+                raise ValueError("Ablation checkpoints require the PCA decoder")
+            return AblationBackbone(channels=arch["channels"], rank=arch["rank"], scale=arch["scale"],
+                                    **arch["ablation"])
         return build_predictor(arch.get("backbone", "imdn"), arch["channels"],
                                arch["rank"] if decoder is not None else None, arch["width"],
                                scale=arch["scale"], num_blocks=arch.get("num_blocks", 7),

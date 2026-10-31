@@ -19,11 +19,11 @@ def command_defaults(config, stage, allowed):
             raise ValueError(f"Section {name} must be a mapping")
     defaults = {}
     keys = {
-        "model": {"scale", "rank", "width", "basis", "checkpoint", "null_space", "channels"},
+        "model": {"scale", "rank", "source_rank", "basis_mode", "width", "basis", "checkpoint", "null_space", "channels"},
         "data": {"train_hr", "val_hr", "hr_dir", "train_dataset", "val_dataset",
                  "test_dataset", "train_dataset_options", "val_dataset_options",
                  "test_dataset_options", "crop_size", "repeat", "augment", "workers", "resize"},
-        "train": {"output", "resume", "epochs", "batch_size", "lr", "min_lr",
+        "train": {"output", "resume", "epochs", "batch_size", "lr", "min_lr", "basis_lr", "basis_min_lr",
                   "weight_decay", "grad_clip", "val_every", "log_every", "checkpoint_every"},
         "pca": {"output", "batch_size", "repeat", "augment"},
         "evaluation": {"output", "shave", "save_images", "lpips"},

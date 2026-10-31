@@ -137,7 +137,7 @@ def restore_rng(state):
 
 def model_from_checkpoint(checkpoint):
     from .models import IMDN, NuSESR
-    from .pca import BlockNullSpacePCA
+    from .pca import BlockNullSpacePCA, PCAMixingBasis
 
     arch = checkpoint["architecture"]
     state = checkpoint["model"]
@@ -147,9 +147,19 @@ def model_from_checkpoint(checkpoint):
         model.load_state_dict(state)
         return model
     eigenvalues = state["decoder.eigenvalues"]
-    decoder = BlockNullSpacePCA(arch["scale"], state["decoder.mean"],
-                               state["decoder.components"],
-                               eigenvalues if eigenvalues.numel() else None)
+    mode = arch.get("basis_mode", "fixed_pca")
+    if mode == "pca_mixing":
+        decoder = PCAMixingBasis(
+            arch["scale"], state["decoder.mean"], state["decoder.source_components"],
+            rank=arch["rank"], eigenvalues=eigenvalues if eigenvalues.numel() else None)
+        if decoder.source_rank != arch["source_rank"]:
+            raise ValueError("Checkpoint source rank and PCA buffers do not match")
+    elif mode == "fixed_pca":
+        decoder = BlockNullSpacePCA(arch["scale"], state["decoder.mean"],
+                                   state["decoder.components"],
+                                   eigenvalues if eigenvalues.numel() else None)
+    else:
+        raise ValueError(f"Unsupported basis mode: {mode}")
     if decoder.channels != arch["channels"] or decoder.rank != arch["rank"]:
         raise ValueError("Checkpoint architecture and PCA buffers do not match")
     predictor = IMDN(arch["channels"], arch["rank"], arch["width"])

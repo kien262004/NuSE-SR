@@ -1,5 +1,6 @@
 """Train IMDN in image space or with the optional fixed PCA null-space plugin."""
 import argparse
+import math
 import os
 from pathlib import Path
 
@@ -13,7 +14,7 @@ from nullspaceSR.engine import train_one_epoch
 from nullspaceSR.evaluation import evaluate
 from nullspaceSR.metrics import LPIPSMetric
 from nullspaceSR.models import IMDN, NuSESR
-from nullspaceSR.pca import BlockNullSpacePCA
+from nullspaceSR.pca import BlockNullSpacePCA, PCAMixingBasis
 from nullspaceSR.utils import (get_device, model_from_checkpoint, parse_args, restore_rng,
                     rng_state, save_checkpoint, seed_everything, sha256, write_csv, write_json)
 from nullspaceSR.tracking import add_wandb_arguments, init_wandb, wandb_rgb_image
@@ -33,6 +34,8 @@ def main():
     parser.add_argument("--resume", help="Resume an epoch-boundary last.pt checkpoint")
     parser.add_argument("--scale", type=int, default=4)
     parser.add_argument("--rank", type=int, default=8)
+    parser.add_argument("--basis-mode", choices=("fixed_pca", "pca_mixing"), default="fixed_pca")
+    parser.add_argument("--source-rank", type=int, default=None)
     parser.add_argument("--width", type=int, default=64)
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--batch-size", type=int, default=8)
@@ -42,6 +45,8 @@ def main():
     parser.add_argument("--seed", type=int, default=2026)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--min-lr", type=float, default=1e-6)
+    parser.add_argument("--basis-lr", type=float, default=1e-4)
+    parser.add_argument("--basis-min-lr", type=float, default=1e-7)
     parser.add_argument("--weight-decay", type=float, default=0)
     parser.add_argument("--grad-clip", type=float, default=1)
     parser.add_argument("--val-every", type=int, default=1)
@@ -60,10 +65,17 @@ def main():
     args.null_space = bool(args.basis) if args.null_space is None else args.null_space
     if args.null_space and not args.basis:
         parser.error("basis is required when null_space is enabled")
+    if args.basis_mode == "pca_mixing" and not args.null_space:
+        parser.error("pca_mixing requires null_space")
+    if args.basis_mode == "pca_mixing" and args.source_rank is None:
+        parser.error("pca_mixing requires source_rank")
     if min(args.epochs, args.val_every, args.log_every, args.checkpoint_every) < 1:
         parser.error("epochs, val_every, log_every and checkpoint_every must be positive")
     if args.lr <= 0 or not 0 <= args.min_lr <= args.lr or args.weight_decay < 0 or args.grad_clip < 0:
         parser.error("Invalid optimizer parameters")
+    if args.basis_mode == "pca_mixing" and (args.basis_lr <= 0 or
+            not 0 <= args.basis_min_lr <= args.basis_lr):
+        parser.error("Invalid mixing optimizer parameters")
     output = Path(args.output)
     if (output / "last.pt").exists() and not args.resume:
         raise FileExistsError(f"{output}/last.pt exists; use --resume or a new output folder")
@@ -79,7 +91,9 @@ def main():
     if set(manifest["train"].get("sources", [])) & set(manifest["validation"].get("sources", [])):
         raise ValueError("Train and validation image paths overlap")
     if args.null_space:
-        decoder = BlockNullSpacePCA.load(args.basis)
+        source = BlockNullSpacePCA.load(args.basis)
+        decoder = (PCAMixingBasis.from_pca(source, rank=args.rank, source_rank=args.source_rank)
+                   if args.basis_mode == "pca_mixing" else source)
         if (decoder.scale, decoder.rank) != (args.scale, args.rank):
             raise ValueError("Basis scale/rank do not match training configuration")
         model = NuSESR(IMDN(decoder.channels, args.rank, args.width), decoder)
@@ -93,6 +107,10 @@ def main():
         checkpoint = torch.load(args.resume, map_location="cpu", weights_only=True)
         if checkpoint["architecture"].get("null_space", True) != args.null_space:
             raise ValueError("Resume null_space mode differs from the checkpoint")
+        if checkpoint["architecture"].get("basis_mode", "fixed_pca") != args.basis_mode:
+            raise ValueError("Resume basis mode differs from the checkpoint")
+        if args.basis_mode == "pca_mixing" and checkpoint["architecture"].get("source_rank") != args.source_rank:
+            raise ValueError("Resume source rank differs from the checkpoint")
         if checkpoint["architecture"]["channels"] != model.channels:
             raise ValueError("Resume channels differ from the checkpoint")
         if checkpoint["basis_sha256"] != basis_hash:
@@ -102,6 +120,10 @@ def main():
                     "train_dataset", "train_dataset_options", "val_dataset", "val_dataset_options"):
             if checkpoint["config"][key] != getattr(args, key):
                 raise ValueError(f"Resume config changed: {key}; retain the original training schedule")
+        if args.basis_mode == "pca_mixing":
+            for key in ("basis_mode", "source_rank", "basis_lr", "basis_min_lr"):
+                if checkpoint["config"].get(key) != getattr(args, key):
+                    raise ValueError(f"Resume config changed: {key}")
         if checkpoint["manifest"] != manifest:
             raise ValueError("Resume dataset manifest differs from the checkpoint")
         model = model_from_checkpoint(checkpoint)
@@ -111,8 +133,21 @@ def main():
         print("Checkpoint already completed the configured training schedule.")
         return
     model.to(device)
-    optimizer = torch.optim.AdamW(model.predictor.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=args.min_lr)
+    if args.basis_mode == "pca_mixing":
+        optimizer = torch.optim.AdamW([
+            {"params": model.predictor.parameters(), "lr": args.lr},
+            {"params": model.decoder.parameters(), "lr": args.basis_lr},
+        ], weight_decay=args.weight_decay)
+        def cosine_factor(epoch, initial, minimum):
+            return (minimum + (initial - minimum) *
+                    (1 + math.cos(math.pi * min(epoch, args.epochs) / args.epochs)) / 2) / initial
+        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, [
+            lambda epoch: cosine_factor(epoch, args.lr, args.min_lr),
+            lambda epoch: cosine_factor(epoch, args.basis_lr, args.basis_min_lr),
+        ])
+    else:
+        optimizer = torch.optim.AdamW(model.predictor.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=args.min_lr)
     if checkpoint:
         optimizer.load_state_dict(checkpoint["optimizer"])
         scheduler.load_state_dict(checkpoint["scheduler"])
@@ -127,6 +162,8 @@ def main():
                     "null_space": args.null_space, "scale": args.scale,
                     "rank": args.rank if args.null_space else None,
                     "channels": model.channels, "width": args.width}
+    if args.basis_mode == "pca_mixing":
+        architecture.update({"basis_mode": "pca_mixing", "source_rank": args.source_rank})
     print(f"Training {architecture} on {device}; {len(train_loader)} batches/epoch", flush=True)
     wandb, wandb_run = init_wandb(args, job_type="train")
     lpips_metric = LPIPSMetric().to(device) if args.lpips else None
@@ -169,6 +206,8 @@ def main():
                                        grad_clip=args.grad_clip, epoch=epoch,
                                        log_every=args.log_every, on_step=log_batch)
         record = {"epoch": epoch, "lr": current_lr, **train_metrics}
+        if args.basis_mode == "pca_mixing":
+            record["basis_lr"] = optimizer.param_groups[1]["lr"]
         improved = False
         wandb_metrics = {"global_step": epoch * len(train_loader), "epoch": epoch,
                          "train/epoch_loss": train_metrics[model.loss_name],

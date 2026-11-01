@@ -43,10 +43,10 @@ Installed command aliases are `nusesr-fit-pca`, `nusesr-train`, and `nusesr-test
 ## Build a model
 
 ```python
-from nullspaceSR import BlockNullSpacePCA, NuSESR, IMDN
+from nullspaceSR import BlockNullSpacePCA, NuSESR, NuSEBackbone
 
 pca = BlockNullSpacePCA.fit(train_hr_loader, scale=4, rank=8)
-model = NuSESR(IMDN(channels=3, rank=8, width=64), pca)
+model = NuSESR(NuSEBackbone(channels=3, rank=8, width=32, eigenvalues=pca.eigenvalues), pca)
 sr = model(lr)
 null_detail = model.predict_null(lr)
 ```

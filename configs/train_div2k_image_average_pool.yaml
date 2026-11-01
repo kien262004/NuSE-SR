@@ -1,12 +1,15 @@
 # Shared experiment config: model, data, train, plus PCA/evaluation/runtime.
-# Image-space IMDN with average-pool LR inputs; no PCA fitting required.
+# Image-space NuSE-E backbone with average-pool LR inputs; no PCA fitting required.
 model:
+  backbone: nuse
+  num_blocks: 7
+  block: plain
   null_space: false
   channels: 3
   scale: 4
   rank: 8
-  width: 64
-  checkpoint: runs/imdn_x4_average_pool/best.pt
+  width: 32
+  checkpoint: runs/nuse_e_image_x4_average_pool/best.pt
 data:
   train_dataset: div2k
   val_dataset: div2k
@@ -31,7 +34,7 @@ data:
   augment: true
   workers: 0
 train:
-  output: runs/imdn_x4_average_pool
+  output: runs/nuse_e_image_x4_average_pool
   epochs: 100
   batch_size: 128
   lr: 0.001
@@ -48,7 +51,7 @@ pca:
   augment: false
 evaluation:
   lpips: true
-  output: results/imdn_x4_average_pool_validation
+  output: results/nuse_e_image_x4_average_pool_validation
   shave: 0
   save_images: false
 runtime:

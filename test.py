@@ -1,4 +1,4 @@
-"""Evaluate a self-contained IMDN or NuSESR checkpoint on an HR image folder."""
+"""Evaluate a self-contained NuSE-E or legacy IMDN checkpoint on an HR image folder."""
 import argparse
 import os
 from pathlib import Path
@@ -19,7 +19,7 @@ def main():
     parser.add_argument("--checkpoint")
     parser.add_argument("--hr-dir")
     add_dataset_arguments(parser, "test")
-    parser.add_argument("--output", default="results/nusesr")
+    parser.add_argument("--output", default="results/nuse_e")
     parser.add_argument("--device", default="auto")
     parser.add_argument("--workers", type=int, default=0)
     parser.add_argument("--shave", type=int, default=0)

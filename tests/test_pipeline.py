@@ -43,6 +43,7 @@ class PipelineTest(unittest.TestCase):
             run("train")
             state = torch.load(root / "run" / "last.pt", weights_only=True)
             self.assertTrue(state["architecture"]["null_space"])
+            self.assertEqual(state["architecture"]["backbone"], "nuse")
             self.assertIn("train_coefficient_image_mse", state["history"][0])
             run("test", "--checkpoint", root / "run" / "last.pt", "--hr-dir", root / "val",
                 "--output", root / "results")
@@ -82,6 +83,7 @@ class PipelineTest(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             state = torch.load(root / "run" / "last.pt", weights_only=True)
             self.assertFalse(state["architecture"]["null_space"])
+            self.assertEqual(state["architecture"]["backbone"], "nuse")
             self.assertIn("train_image_mse", state["history"][0])
 
     def test_image_space_bicubic_training_resume_and_evaluation(self):

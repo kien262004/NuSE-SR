@@ -136,14 +136,26 @@ def restore_rng(state):
 
 
 def model_from_checkpoint(checkpoint):
-    from .models import IMDN, NuSESR
+    from .models import NuSESR, build_predictor
     from .pca import BlockNullSpacePCA, PCAMixingBasis
 
     arch = checkpoint["architecture"]
     state = checkpoint["model"]
+    def predictor(decoder=None):
+        if arch.get("backbone") == "ablation":
+            from .models.ablation import AblationBackbone
+            if decoder is None:
+                raise ValueError("Ablation checkpoints require the PCA decoder")
+            return AblationBackbone(channels=arch["channels"], rank=arch["rank"], scale=arch["scale"],
+                                    **arch["ablation"])
+        return build_predictor(arch.get("backbone", "imdn"), arch["channels"],
+                               arch["rank"] if decoder is not None else None, arch["width"],
+                               scale=arch["scale"], num_blocks=arch.get("num_blocks", 7),
+                               block=arch.get("block", "plain"), budgets=arch.get("budgets") or None,
+                               stage_blocks=arch.get("stage_blocks"), decoder=decoder)
     # Older checkpoints always used PCA and have no null_space flag.
     if not arch.get("null_space", True):
-        model = NuSESR(IMDN(arch["channels"], width=arch["width"], scale=arch["scale"]))
+        model = NuSESR(predictor())
         model.load_state_dict(state)
         return model
     eigenvalues = state["decoder.eigenvalues"]
@@ -162,7 +174,6 @@ def model_from_checkpoint(checkpoint):
         raise ValueError(f"Unsupported basis mode: {mode}")
     if decoder.channels != arch["channels"] or decoder.rank != arch["rank"]:
         raise ValueError("Checkpoint architecture and PCA buffers do not match")
-    predictor = IMDN(arch["channels"], arch["rank"], arch["width"])
-    model = NuSESR(predictor, decoder)
+    model = NuSESR(predictor(decoder), decoder)
     model.load_state_dict(state)
     return model

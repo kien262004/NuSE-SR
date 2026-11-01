@@ -1,5 +1,7 @@
 # Match configs/train_div2k.yaml except for the PCA-15→8 decoder and its LR group.
+# Pinned to IMDN (width 64): the mixing runs predate the NuSE-E default backbone.
 model:
+  backbone: imdn
   null_space: true
   basis_mode: pca_mixing
   source_rank: 15

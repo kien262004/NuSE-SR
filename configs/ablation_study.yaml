@@ -1,0 +1,47 @@
+# Existing full-rank average-pool PCA basis, shared by every variant and LR method.
+output: runs/ablation_study
+basis: runs/architecture_research/basis/full.pt
+data:
+  train_hr: /home/admin_mcn/scdc_data/data_bundle/phase1_seven_extra/div2k_train/DIV2K_train_HR
+  val_hr: /home/admin_mcn/scdc_data/data_bundle/phase1_seven_extra/div2k_valid/DIV2K_valid_HR
+  scale: 4
+  methods: [average_pool, bicubic]
+  crop_size: 256
+  repeat: 4
+  batch_size: 8
+  workers: 4
+model:
+  width: 16
+  corrected: 2
+  linear_groups: channel  # channel (groups=3) or rgb
+  gate_hidden: 8
+experiment:
+  ranks: [8]              # Expand to [8, 9, 12] after the initial screen.
+  seeds: [2026]            # Use [2026, 2027, 2028] for shortlisted variants.
+  epochs: 100
+  lr: 0.001
+  min_lr: 0.000001
+  weight_decay: 0.0
+  grad_clip: 1.0
+  val_every: 5
+  variants:
+    - {name: linear, variant: linear}
+    - {name: cnn, variant: cnn}
+    - {name: g0_local, variant: local}
+    - {name: g1_global, variant: global}
+    - {name: g2_wider, variant: wider, width: 17}
+    - {name: g3_context, variant: context}
+    - {name: local_c5, variant: local, corrected: 5}
+evaluation:
+  lpips: false
+  shave: 0
+  samples_per_image: 4096
+  tile_size: 64
+  tile_check_images: 4
+runtime:
+  device: auto
+  workers_seed: 2026
+benchmark:
+  lr_size: [256, 256]
+  warmup: 10
+  iterations: 50

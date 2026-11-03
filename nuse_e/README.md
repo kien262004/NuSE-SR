@@ -89,6 +89,7 @@ Có thể ghép nhiều bước: `python -m nuse_e.pipeline evaluate cost report
 | `--resume-from DIR` | Bước `setup`: chép `stats/` và `runs/` của phiên trước; run có file `DONE` không train lại |
 | `--variants e80,d8` | Chỉ dùng các biến thể này (bản v2 luôn có) |
 | `--gpus 0,1` | Bước `train`: GPU dùng, mỗi GPU một run |
+| `--deadline T` | Bước `train`: mốc thời gian Unix phải dừng. Run đang train dừng sau epoch đã lưu `last.pt` (không ghi `DONE`), không nhận run mới; chạy lại bước `train` thì train tiếp, kết quả như chạy một mạch. Run còn thiếu ghi trong `comparison/train_pending.json` |
 | `--device cpu` | Ép chạy CPU |
 | `--smoke` | Chạy thử cực ngắn (2 bước train, ít ảnh) để kiểm code |
 

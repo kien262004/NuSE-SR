@@ -1,12 +1,22 @@
 """Tạo model theo tên và nạp checkpoint (của pipeline này hoặc của thí nghiệm cũ)."""
+import importlib
+
 import torch
 
 from .baselines import ImageSR, LegacyNuSEPlugin
 from .nuse_e import NuSEE
 
+def make_nuse(stats, arch):
+    """NuSEE, or the subclass named by arch["impl"] ("module:Class", an experiment folder on sys.path)."""
+    if not arch.get("impl"):
+        return NuSEE(stats, arch)
+    module, cls = arch["impl"].split(":")
+    return getattr(importlib.import_module(module), cls)(stats, arch)
+
+
 def build_model(name, method, stats=None, arch=None):
     if name.startswith("NuSE-E"):                        # "NuSE-E" or "NuSE-E/<variant>"
-        return NuSEE(stats, arch)
+        return make_nuse(stats, arch)
     return ImageSR(name)
 
 
@@ -20,7 +30,7 @@ def load_run(path, stats=None, arch=None):
     if "nuse_e" in ck:                                   # this notebook
         info = ck["nuse_e"]
         if info["model"].startswith("NuSE-E"):
-            model = NuSEE(ck["stats"], ck["arch"])
+            model = make_nuse(ck["stats"], ck["arch"])
             model.load_state_dict(ck["model"])
             model.fuse()
         else:

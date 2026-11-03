@@ -39,7 +39,8 @@ def step_train(ctx):
                    epochs=c.EPOCHS, batch=c.BATCH, repeat=c.REPEAT, lr=c.LR, min_lr=c.MIN_LR, grad_clip=c.GRAD_CLIP,
                    val_every=c.VAL_EVERY, checkpoint_every=c.CHECKPOINT_EVERY, workers=c.WORKERS, seed=c.SEED,
                    amp=c.AMP, quick_val_images=c.QUICK_VAL_IMAGES, quick_val_crop=c.QUICK_VAL_CROP,
-                   device="cuda" if ctx.device.type == "cuda" else "cpu", max_iters=c.MAX_ITERS)
+                   device="cuda" if ctx.device.type == "cuda" else "cpu", max_iters=c.MAX_ITERS,
+                   deadline=ctx.args.deadline)
         path = ctx.run_dir(method, model) / "config.json"
         write_json(path, cfg)
         return path
@@ -53,7 +54,7 @@ def step_train(ctx):
         slots = ctx.args.gpus.split(",")
     else:
         slots = [str(i) for i in range(torch.cuda.device_count())] if ctx.device.type == "cuda" else ["cpu"]
-    start, active, shown = time.time(), {}, {}
+    start, active, shown, cut = time.time(), {}, {}, False
     while jobs or active or phase_b:
         if not jobs and not active and phase_b:
             phase_b = False
@@ -68,8 +69,13 @@ def step_train(ctx):
                 print(f"Quá {c.MAX_HOURS} giờ: không nhận run mới. Chạy lại bước train để tiếp tục.")
                 jobs, phase_b = [], False
                 break
+            if ctx.args.deadline and time.time() > ctx.args.deadline:
+                print("Đã tới --deadline: không nhận run mới. Chạy lại bước train để tiếp tục.")
+                jobs, phase_b, cut = [], False, True
+                break
             method, model = jobs.pop(0)
-            env = dict(os.environ, PYTHONPATH=os.pathsep.join(filter(None, [str(PACKAGE_PARENT), os.environ.get("PYTHONPATH")])))
+            env = dict(os.environ, PYTHONPATH=os.pathsep.join(filter(None, [
+                str(PACKAGE_PARENT), ctx.paths.get("experiment"), os.environ.get("PYTHONPATH")])))
             if slot != "cpu":
                 env["CUDA_VISIBLE_DEVICES"] = slot
             config_path = job_config(method, model)
@@ -92,4 +98,12 @@ def step_train(ctx):
                 if proc.returncode != 0:
                     print((ctx.run_dir(method, model) / "stdout.log").read_text()[-3000:])
                     sys.exit(f"{model} / {method} lỗi (mã {proc.returncode})")
-    print(f"Train xong sau {(time.time() - start) / 3600:.2f} giờ")
+    # Run tạm dừng vì --deadline (không có DONE) hay chưa kịp bắt đầu: ghi lại để notebook biết phải chạy tiếp.
+    pending = [f"{mdl} / {m}" for m in c.METHODS for mdl in c.MODELS if not ctx.is_done(m, mdl) and (
+        wanted(m, mdl) or (ctx.run_dir(m, mdl) / "last.pt").exists())]
+    if cut and not pending:
+        pending = ["pha B (LR bicubic) chưa bắt đầu"]
+    write_json(ctx.compare / "train_pending.json", pending)
+    if pending:
+        print("Chưa xong (chạy lại bước train để tiếp tục từ last.pt):", pending)
+    print(f"Train {'xong' if not pending else 'tạm dừng'} sau {(time.time() - start) / 3600:.2f} giờ")

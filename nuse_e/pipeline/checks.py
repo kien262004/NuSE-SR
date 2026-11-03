@@ -8,8 +8,7 @@ from ..core.io import write_csv, write_json
 from ..data.images import ValImages, as_float
 from ..evaluation.cost import time_cuda
 from ..models.blocks import ResBlock
-from ..models.nuse_e import NuSEE
-from ..models.registry import load_run
+from ..models.registry import load_run, make_nuse
 from ..nullspace.basis import helmert, lr_windows
 from ..operators import degrade, make_operator
 
@@ -39,13 +38,13 @@ def step_test(ctx):
         for name in c.NUSE:
             arch = ctx.arch(method, name)
             tag = f"[{method} {name}]"
-            model = NuSEE(stats, arch).eval()
+            model = make_nuse(stats, arch).eval()
             u = model.decoder.basis.double()
             check(f"T4 {tag} UᵀU = I", (torch.einsum("cpk,cpj->ckj", u, u) - torch.eye(u.shape[-1])).abs().max() < 1e-5)
             worst = 0.0
             for seed in range(3):
                 torch.manual_seed(seed)
-                net = NuSEE(stats, arch).eval()
+                net = make_nuse(stats, arch).eval()
                 with torch.no_grad():
                     for p in net.parameters():
                         p.normal_(0, 1)
@@ -57,20 +56,22 @@ def step_test(ctx):
                 k1 = model.budgets[min(1, len(model.budgets) - 1)]
                 before = model(y, k1).clone()
                 g1 = model.budgets.index(k1)
-                for mod in list(model.stages[g1 + 1:]) + list(model.heads[g1 + 1:]):
+                later = [*model.stages[g1 + 1:], *model.heads[g1 + 1:], *getattr(model, "mixers", [])[g1 + 1:]]
+                for mod in later:
                     for p in mod.parameters():
                         p.add_(torch.randn_like(p))
                 check(f"T7 {tag} output ở K={k1} không phụ thuộc stage sau", torch.equal(before, model(y, k1)))
-            model = NuSEE(stats, arch)
+            model = make_nuse(stats, arch)
             W, blk = arch["width"], ResBlock.inference_params(arch["width"], arch["block"])
+            extra = getattr(model, "extra_inference_params", lambda g: 0)    # module riêng của lớp con thí nghiệm
             formula = [28 * W + blk * sum(arch["blocks"][:g + 1]) + sum((3 * W + 3) * n + 30 * n * l for n, l in
-                       zip(arch["groups"][:g + 1], arch["linear"][:g + 1])) for g in range(len(arch["budgets"]))]
+                       zip(arch["groups"][:g + 1], arch["linear"][:g + 1])) + extra(g) for g in range(len(arch["budgets"]))]
             params = [model.params_for(k) for k in model.budgets]
             check(f"T8 {tag} số tham số suy luận theo công thức", params == formula, params)
             check(f"T9 {tag} mỗi ngân sách thêm ≥ 1 block", min([params[0]] + [b - a for a, b in zip(params, params[1:])]) >= blk)
-            if arch["block"] == "rep":
+            if arch["block"] not in ("plain", "lk7"):                      # block gộp nhánh: rep, acb, ecb, ...
                 torch.manual_seed(0)
-                net = NuSEE(stats, arch).eval()
+                net = make_nuse(stats, arch).eval()
                 with torch.no_grad():
                     for p in net.parameters():
                         p.normal_(0, 0.3)
@@ -79,7 +80,7 @@ def step_test(ctx):
                     fused = [net(y, k) for k in net.budgets]
                     n_params = sum(p.numel() for p in net.parameters())
                 err = max(((a - b).abs().max() / a.abs().max()).item() for a, b in zip(outs, fused))
-                check(f"T11 {tag} gộp RepConv: output bằng nhau, tham số = công thức",
+                check(f"T11 {tag} gộp nhánh ({arch['block']}): output bằng nhau, tham số = công thức",
                       err < 1e-5 and n_params == params[-1], f"{err:.1e}, {n_params}")
             if arch["linear"][0]:
                 lr = degrade(torch.rand(2, 3, 64, 64, dtype=torch.float64), method)
@@ -120,7 +121,7 @@ def step_screen(ctx):
     rows = []
     for name in c.NUSE:
         arch = ctx.arch(method, name)
-        model = NuSEE(stats, arch).fuse().to(ctx.device).eval()
+        model = make_nuse(stats, arch).fuse().to(ctx.device).eval()
         kmax = model.budgets[-1]
         params = model.params_for(kmax)
         ms = quick_ms(lambda m=model: m(x256, kmax)) if cuda else None

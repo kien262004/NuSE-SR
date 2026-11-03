@@ -49,7 +49,7 @@ def validate(model, images, method, device):
 
 def train(cfg, log=print):
     """One run. cfg keys: model, method, run_dir, train_files, val_files, stats, arch, epochs, batch,
-    repeat, lr, min_lr, grad_clip, val_every, checkpoint_every, workers, seed, amp, device, max_iters."""
+    repeat, lr, min_lr, grad_clip, val_every, checkpoint_every, workers, seed, amp, device, max_iters, deadline."""
     device = torch.device(cfg["device"])
     run_dir = Path(cfg["run_dir"])
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -91,7 +91,7 @@ def train(cfg, log=print):
         log(f"resume from epoch {ck['epoch']}")
     meta = {"model": cfg["model"], "method": cfg["method"], "protocol": {k: cfg[k] for k in (
         "epochs", "batch", "repeat", "lr", "min_lr", "grad_clip", "seed", "amp")}}
-    t_run = time.time()
+    t_run, slowest = time.time(), 0.0
     for epoch in range(start, cfg["epochs"] + 1):
         model.train()
         loader.set_epoch(epoch)
@@ -147,4 +147,10 @@ def train(cfg, log=print):
         if "validation" in record:
             msg += f" || DIV2K valid đủ {len(val_images)} ảnh: {progress_text(record['validation'], model)}"
         log(msg)
+        # Sắp hết giờ (--deadline, vd. giới hạn 12 giờ của Kaggle): dừng sau epoch vừa lưu last.pt, không ghi DONE.
+        # Chạy lại bước train (cùng output) thì train tiếp từ last.pt, kết quả như chạy một mạch.
+        slowest = max(slowest, time.time() - t0)
+        if cfg.get("deadline") and epoch < cfg["epochs"] and time.time() + 1.5 * slowest > cfg["deadline"]:
+            log(f"tạm dừng sau epoch {epoch}/{cfg['epochs']} vì sắp hết giờ; chạy lại bước train để tiếp tục")
+            return
     (run_dir / "DONE").write_text(f"{time.time() - t_run:.0f}s\n")

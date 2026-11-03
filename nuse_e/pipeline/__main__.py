@@ -28,9 +28,13 @@ def main(argv=None):
     parser.add_argument("--benchmarks", help="thư mục chứa Set5, Set14, B100, Urban100, Manga109 (ảnh HR)")
     parser.add_argument("--cache", help="thư mục cache ảnh (mặc định <out>/cache)")
     parser.add_argument("--resume-from", help="bước setup: chép stats/ và runs/ từ output phiên trước")
+    parser.add_argument("--experiment", help="thư mục thí nghiệm có experiment.py (biến thể, thiết lập riêng; "
+                                             "xem experiments/README.md). Được nhớ trong <out>/paths.json")
     parser.add_argument("--variants", help="chỉ dùng các biến thể này, ví dụ e80,d8 (mặc định: mọi biến thể trong config.py)")
     parser.add_argument("--device", help="cuda hoặc cpu (mặc định: cuda nếu có)")
     parser.add_argument("--gpus", help="bước train: danh sách GPU, ví dụ 0,1 (mỗi GPU một run)")
+    parser.add_argument("--deadline", type=float, help="bước train: mốc thời gian Unix phải dừng; run đang chạy lưu "
+                                                       "last.pt rồi dừng, không nhận run mới (chạy lại để tiếp tục)")
     parser.add_argument("--smoke", action="store_true", help="chạy thử cực ngắn để kiểm code")
     args = parser.parse_args(argv)
     ctx = Ctx(args)

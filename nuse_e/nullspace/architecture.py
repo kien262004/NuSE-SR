@@ -68,14 +68,17 @@ def derive_architecture(eigenvalues, linear_r2, *, energy_targets=(0.5, 0.8, 0.9
                      "r2_min": r2_min, "rel_tol": rel_tol, "min_share": min_share}}
 
 
-def architecture_from_stats(stats, width=32, block="plain", alpha="uniform", **rule):
-    """Rule output plus the trunk hyper-parameters (width, block kind, loss weights) that the rule does not set."""
+def architecture_from_stats(stats, width=32, block="plain", alpha="uniform", impl=None, options=None, **rule):
+    """Rule output plus the trunk hyper-parameters (width, block kind, loss weights) that the rule does not set.
+    `impl` ("module:Class", a NuSEE subclass from an experiment folder) and its `options` are stored as given."""
     lam = stats["eigenvalues"].mean(0).tolist()
     r2 = stats["r2"].mean(0).tolist()
     arch = derive_architecture(lam, r2, **rule)
     arch["method"] = stats["method"]
     arch["retained_energy"] = [sum(lam[:k]) / sum(lam) for k in arch["budgets"]]
     arch["width"], arch["block"], arch["alpha"] = width, block, alpha
+    if impl:
+        arch["impl"], arch["options"] = impl, dict(options or {})
     return arch
 
 

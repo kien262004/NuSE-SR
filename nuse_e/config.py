@@ -77,20 +77,25 @@ OLD_REPORTED = {
 }
 
 
-def load(smoke=False, only=None):
-    """Bản sao các thiết lập trên. `smoke`: chạy thử cực ngắn để kiểm code. `only`: chỉ giữ các biến thể này."""
+def load(smoke=False, only=None, overrides=None):
+    """Bản sao các thiết lập trên. `smoke`: chạy thử cực ngắn để kiểm code. `only`: chỉ giữ các biến thể này.
+    `overrides`: thiết lập viết hoa của một thí nghiệm (file experiment.py, xem experiments/README.md) thay giá trị ở đây."""
     c = SimpleNamespace(**{k: v for k, v in globals().items() if k.isupper()})
-    c.VARIANTS = dict(VARIANTS)
+    c.__dict__.update({k: v for k, v in (overrides or {}).items() if k.isupper()})
+    variants = c.VARIANTS = dict(c.VARIANTS)
+    if overrides and "PHASE_B_TOP" not in overrides:     # thí nghiệm: pha B (LR bicubic) cho mọi biến thể
+        c.PHASE_B_TOP = len(variants)
     if only is not None:
-        c.VARIANTS = {k: v for k, v in VARIANTS.items() if k in only}
+        c.VARIANTS = {k: v for k, v in variants.items() if k in only}
     if smoke:
         c.EPOCHS, c.BATCH, c.REPEAT, c.VAL_EVERY, c.WORKERS, c.STATS_REPEAT = 2, 2, 1, 1, 0, 1
         c.QUICK_VAL_IMAGES, c.QUICK_VAL_CROP = 2, 64
         c.LATENCY_SIZES, c.WARMUP, c.ITERS, c.ROUNDS, c.CPU_ITERS = [(32, 32)], 1, 2, 1, 2
         c.USE_LPIPS, c.USE_FID = False, False
-        if only is None:
-            c.VARIANTS = {k: VARIANTS[k] for k in ("d8", "rep7", "e80")}
-        c.PHASE_B_TOP = 1
+        if only is None and not overrides:
+            c.VARIANTS = {k: variants[k] for k in ("d8", "rep7", "e80")}
+        if not overrides:                                   # thí nghiệm: chạy thử đúng các run pha B sẽ train
+            c.PHASE_B_TOP = 1
     c.MAX_ITERS = 2 if smoke else None
     c.SMOKE = smoke
     c.NUSE = ["NuSE-E", *[f"NuSE-E/{v}" for v in c.VARIANTS]]   # "NuSE-E" = bản v2; "NuSE-E/<tên>" = biến thể

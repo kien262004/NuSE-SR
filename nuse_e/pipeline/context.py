@@ -1,4 +1,5 @@
 """Bối cảnh dùng chung của mọi bước: đường dẫn, thiết lập, trạng thái đã ghi trên đĩa."""
+import importlib.util
 import json
 import os
 import sys
@@ -15,7 +16,7 @@ from ..data.images import image_files, to_bmp
 from ..models.registry import budgets_of, load_run
 
 PACKAGE_PARENT = Path(__file__).resolve().parents[2]   # thư mục chứa package nuse_e (gốc repo)
-PATH_KEYS = ("data_root", "train_hr", "val_hr", "old_runs", "benchmarks", "cache")
+PATH_KEYS = ("data_root", "train_hr", "val_hr", "old_runs", "benchmarks", "cache", "experiment")
 
 
 class Ctx:
@@ -23,13 +24,14 @@ class Ctx:
 
     def __init__(self, args):
         self.args = args
-        self.c = CONFIG.load(args.smoke, args.variants.split(",") if args.variants else None)
         self.out = Path(args.out).resolve()
         self.stats_dir, self.runs, self.compare = self.out / "stats", self.out / "runs", self.out / "comparison"
         self.fig = self.compare / "figures"
         for path in (self.out, self.stats_dir, self.runs, self.compare, self.fig):
             path.mkdir(parents=True, exist_ok=True)
         self.paths = self._paths(args)
+        self.c = CONFIG.load(args.smoke, args.variants.split(",") if args.variants else None,
+                             load_experiment(self.paths.get("experiment")))
         self.cache = Path(self.paths.get("cache") or self.out / "cache")
         self.device = torch.device(args.device or ("cuda" if torch.cuda.is_available() else "cpu"))
         self._data, self._old = None, None
@@ -182,6 +184,19 @@ class Ctx:
                 if "NuSE k=8" in label:
                     entries[label] = (load_run(path)[0].to(self.device).eval(), None)
         return entries
+
+
+def load_experiment(folder):
+    """Thiết lập viết hoa trong <folder>/experiment.py; thư mục được thêm vào sys.path để nạp model của thí nghiệm."""
+    if not folder:
+        return None
+    if folder not in sys.path:
+        sys.path.insert(0, folder)
+    spec = importlib.util.spec_from_file_location("nuse_e_experiment", Path(folder) / "experiment.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    print("Thí nghiệm:", folder, "|", (module.__doc__ or "").strip().splitlines()[0] if module.__doc__ else "")
+    return {k: getattr(module, k) for k in dir(module) if k.isupper()}
 
 
 def slug(model):
